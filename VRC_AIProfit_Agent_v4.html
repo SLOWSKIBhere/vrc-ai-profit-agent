@@ -1,0 +1,1491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>VRC Stores — AI Profit Agent v4</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+:root{
+  --g1:#0d2b1a;--g2:#1a472a;--g3:#2d6a4f;--g4:#40916c;
+  --gold:#ffd700;--gold2:#b8860b;
+  --red:#c0392b;--red2:#e74c3c;--red3:#fde8e6;
+  --bg:#f4efe4;--card:#fffdf7;--card2:#f9f5ea;
+  --border:#d9c99a;--border2:#e8dfc0;
+  --text:#1c110a;--muted:#6b5c40;--dim:#9a8a6a;
+  --blue:#1a6fb5;--blue2:#e8f2fc;
+  --purple:#6b21a8;--purple2:#f3e8ff;
+  --shadow:0 2px 12px rgba(0,0,0,.08);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);font-size:15px;min-height:100vh}
+#login{position:fixed;inset:0;background:linear-gradient(145deg,var(--g1),var(--g2) 60%,#2d4a1e);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;padding:24px;z-index:9999}
+.l-logo{font-size:52px}
+.l-title{color:var(--gold);font-size:22px;font-weight:800;text-align:center;line-height:1.3}
+.l-sub{color:#7dc9a0;font-size:13px;text-align:center}
+.l-box{background:#fff;border-radius:14px;padding:28px 22px;width:100%;max-width:350px;box-shadow:0 8px 32px rgba(0,0,0,.4)}
+.l-box label{display:block;font-weight:700;color:var(--g2);margin-bottom:8px;font-size:14px}
+.l-box input{width:100%;padding:13px 14px;border:2px solid var(--border);border-radius:8px;font-size:16px;margin-bottom:12px;transition:border-color .2s}
+.l-box input:focus{outline:none;border-color:var(--g3)}
+#lErr{color:var(--red);font-size:13px;min-height:18px;text-align:center;margin-bottom:6px}
+#app{display:none}
+.hdr{background:linear-gradient(135deg,var(--g1),var(--g2));padding:12px 16px;position:sticky;top:0;z-index:100;box-shadow:0 2px 10px rgba(0,0,0,.3)}
+.hdr-top{display:flex;align-items:center;justify-content:space-between}
+.hdr-t{color:var(--gold);font-size:14px;font-weight:800;line-height:1.25}
+.hdr-s{color:#7dc9a0;font-size:11px;margin-top:2px}
+.fest-p{background:var(--gold);color:var(--g1);font-size:11px;font-weight:800;padding:3px 10px;border-radius:20px;display:none}
+.agent-bar{background:var(--g3);padding:6px 16px;display:flex;align-items:center;gap:8px;font-size:12px;color:#c8f0de}
+.a-dot{width:7px;height:7px;border-radius:50%;background:#22c55e;flex-shrink:0}
+.a-dot.off{background:#94a3b8}
+.nav{display:flex;background:var(--g2);overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.nav::-webkit-scrollbar{display:none}
+.nb{flex:1;min-width:58px;padding:10px 5px;background:none;border:none;color:#7dc9a0;font-size:11px;cursor:pointer;transition:all .2s;text-align:center;border-bottom:3px solid transparent;font-weight:600;white-space:nowrap}
+.nb.on{color:var(--gold);border-bottom-color:var(--gold);background:rgba(0,0,0,.18)}
+.pg{display:none;padding:14px;max-width:700px;margin:0 auto;padding-bottom:30px}
+.pg.on{display:block}
+.card{background:var(--card);border:1px solid var(--border2);border-radius:10px;padding:15px;margin-bottom:12px;box-shadow:var(--shadow)}
+.ch{font-size:14px;font-weight:800;color:var(--g2);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:6px}
+.fl{display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em}
+input[type=text],input[type=number],input[type=password],textarea,select{width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:15px;background:#fff;color:var(--text);transition:border-color .2s;margin-bottom:10px;-webkit-appearance:none}
+input:focus,textarea:focus,select:focus{outline:none;border-color:var(--g3);box-shadow:0 0 0 3px rgba(45,106,79,.12)}
+textarea{resize:vertical;min-height:68px;font-family:inherit}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:11px 18px;border:none;border-radius:7px;font-size:14px;font-weight:700;cursor:pointer;transition:all .2s;width:100%;margin-bottom:8px}
+.bg{background:var(--g2);color:var(--gold)}.bg:hover{background:var(--g3)}
+.bgold{background:var(--gold);color:var(--g1)}.bgold:hover{background:#ffc800}
+.bred{background:var(--red);color:#fff}
+.bmut{background:var(--border2);color:var(--text)}.bmut:hover{background:var(--border)}
+.bai{background:linear-gradient(135deg,#6b21a8,#1a6fb5);color:#fff}
+.bsm{padding:6px 12px;font-size:12px;width:auto;margin-bottom:0}
+.row{display:flex;gap:8px}.row .btn{flex:1}
+.al{padding:10px 13px;border-radius:7px;font-size:13px;margin-bottom:10px;display:none;line-height:1.5;border-left:3px solid}
+.ok{background:#d1fae5;color:#065f46;border-left-color:#10b981;display:block}
+.err{background:var(--red3);color:#991b1b;border-left-color:var(--red);display:block}
+.warn{background:#fef3c7;color:#92400e;border-left-color:#f59e0b;display:block}
+.info{background:var(--blue2);color:#1e3a5f;border-left-color:var(--blue);display:block}
+.aial{background:var(--purple2);color:#4c1d95;border-left-color:var(--purple);display:block}
+.pb{padding:20px 16px;border-radius:12px;text-align:center;margin-bottom:12px}
+.pb-tag{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;opacity:.8}
+.pb-num{font-size:40px;font-weight:900;letter-spacing:-2px;margin:4px 0}
+.pb-sub{font-size:13px;opacity:.75}
+.pb.profit{background:var(--g2);color:#fff}
+.pb.loss{background:var(--red);color:#fff}
+.pb.zero{background:#64748b;color:#fff}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.sb{padding:13px 10px;border-radius:8px;text-align:center;border:1px solid transparent}
+.sl{font-size:11px;font-weight:700;text-transform:uppercase;opacity:.7}
+.sv{font-size:20px;font-weight:900;margin-top:3px}
+.sg{background:#d1fae5;color:#065f46;border-color:#6ee7b7}
+.sr{background:var(--red3);color:#991b1b;border-color:#fca5a5}
+.sy{background:#fef9c3;color:#854d0e;border-color:#fde047}
+.sb2{background:var(--blue2);color:#1e40af;border-color:#93c5fd}
+.sp{background:var(--purple2);color:#4c1d95;border-color:#c4b5fd}
+.pw{background:#e5e7eb;border-radius:99px;overflow:hidden;height:14px}
+.pb2{height:100%;border-radius:99px;transition:width .6s;background:linear-gradient(90deg,var(--g3),var(--g4))}
+.el{max-height:190px;overflow-y:auto;margin-bottom:4px}
+.en{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;margin-bottom:5px;font-size:13px}
+.eu{background:#ecfdf5;border-left:3px solid var(--g4)}
+.ee{background:#fef2f2;border-left:3px solid var(--red2)}
+.et{flex:1;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+.ea{font-weight:800;white-space:nowrap}
+.eu .ea{color:var(--g2)}.ee .ea{color:var(--red)}
+.db{background:none;border:none;color:#9ca3af;cursor:pointer;font-size:15px;padding:0 3px;flex-shrink:0}
+.db:hover{color:var(--red2)}
+.ki{display:flex;align-items:center;justify-content:space-between;padding:11px 12px;border-bottom:1px solid var(--border2);gap:8px}
+.ki:last-child{border-bottom:none}
+.kn{font-weight:700;font-size:14px}.kd{font-size:11px;color:var(--dim)}
+.ka{font-size:16px;font-weight:900;color:var(--red)}
+.kpaid .kn,.kpaid .ka{text-decoration:line-through;opacity:.5}
+.wa-msg{background:#ecfdf5;border:1.5px solid #4ade80;border-radius:9px;padding:14px;font-family:'Courier New',monospace;font-size:12px;line-height:1.7;white-space:pre-wrap;word-break:break-word;color:#14532d}
+.ai-box{background:linear-gradient(135deg,var(--purple2),var(--blue2));border:1px solid #c4b5fd;border-radius:10px;padding:14px}
+.ai-hd{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;color:var(--purple);margin-bottom:10px}
+.ai-body{font-size:13.5px;color:#1e1b4b;line-height:1.65}
+.sp2{width:16px;height:16px;border:2px solid #c4b5fd;border-top-color:var(--purple);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+.ld{display:flex;align-items:center;gap:8px;color:var(--purple);font-size:13px;padding:10px 0}
+.cw{position:relative;height:190px}
+.tr{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border2)}
+.tr:last-child{border-bottom:none}
+.tl{font-size:14px;font-weight:700}.ts{font-size:12px;color:var(--dim);margin-top:1px}
+.tg{position:relative;width:44px;height:24px;flex-shrink:0}
+.tg input{opacity:0;width:0;height:0}
+.slr{position:absolute;cursor:pointer;inset:0;background:#cbd5e1;border-radius:24px;transition:.25s}
+.slr::before{content:'';position:absolute;width:18px;height:18px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.25s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+input:checked+.slr{background:var(--g3)}
+input:checked+.slr::before{transform:translateX(20px)}
+.agent-step{background:var(--card2);border:1.5px solid var(--border2);border-radius:9px;padding:11px 13px;transition:border-color .3s,box-shadow .3s}
+.agent-step.running{border-color:var(--purple);box-shadow:0 0 0 3px rgba(107,33,168,.12)}
+.agent-step.done{border-color:#10b981;background:#f0fdf4}
+.agent-step.warn{border-color:#f59e0b;background:#fffbeb}
+.agent-step.fail{border-color:var(--red);background:var(--red3)}
+.as-hd{display:flex;align-items:center;gap:8px;font-size:13px}
+.as-icon{font-size:18px;flex-shrink:0}
+.as-name{font-weight:700;flex:1;color:var(--text)}
+.as-badge{font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;background:#e2e8f0;color:#64748b;white-space:nowrap}
+.as-badge.running{background:var(--purple2);color:var(--purple)}
+.as-badge.done{background:#d1fae5;color:#065f46}
+.as-badge.warn{background:#fef3c7;color:#92400e}
+.as-badge.fail{background:var(--red3);color:var(--red)}
+.as-out{font-size:12.5px;color:var(--muted);margin-top:7px;line-height:1.6;display:none}
+.as-out.show{display:block}
+.as-arrow{text-align:center;color:var(--dim);font-size:18px;line-height:1;margin:-3px 0}
+.ig{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.ic{background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:11px 12px}
+.ich{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:5px}
+.icv{font-size:15px;font-weight:800;color:var(--g2)}
+.ics{font-size:11px;color:var(--dim);margin-top:2px}
+.sd{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-radius:6px;margin-bottom:4px;font-size:13px}
+.sd:nth-child(odd){background:var(--card2)}
+.sdn{font-weight:600;color:var(--muted);width:50px}
+.sdb{flex:1;margin:0 10px}
+.sdi{height:8px;background:var(--g4);border-radius:4px;transition:width .5s}
+.sdp{font-weight:800;width:80px;text-align:right}
+.sdp.pos{color:var(--g2)}.sdp.neg{color:var(--red)}
+.empty{text-align:center;padding:28px 20px;color:var(--dim)}
+.empty-i{font-size:32px;margin-bottom:8px}
+.sl2{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--dim);margin-bottom:8px}
+.tag{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700}
+.tg2{background:#d1fae5;color:#065f46}
+@media(max-width:400px){.g2{grid-template-columns:1fr}.g3{grid-template-columns:1fr 1fr}.pb-num{font-size:30px}}
+
+/* ══ PHASE 2: SETUP WIZARD ══════════════════════════════ */
+#setup{position:fixed;inset:0;background:linear-gradient(145deg,var(--g1),var(--g2) 60%,#2d4a1e);display:none;align-items:center;justify-content:center;flex-direction:column;gap:14px;padding:24px;z-index:9999;overflow-y:auto}
+#setup.show{display:flex}
+.sw-prog{display:flex;gap:6px;margin-bottom:2px}
+.sw-dot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.25);transition:.35s}
+.sw-dot.on{background:var(--gold);width:26px;border-radius:4px}
+.sw-step{display:none;width:100%;max-width:360px}
+.sw-step.on{display:block}
+.sw-box{background:#fff;border-radius:14px;padding:26px 22px;box-shadow:0 8px 32px rgba(0,0,0,.45)}
+.sw-icon{font-size:44px;text-align:center;margin-bottom:6px}
+.sw-title{color:var(--g2);font-size:18px;font-weight:900;text-align:center;margin-bottom:4px}
+.sw-hint{color:var(--muted);font-size:13px;text-align:center;margin-bottom:18px;line-height:1.5}
+.sw-box label{display:block;font-weight:700;color:var(--g2);margin-bottom:5px;font-size:13px;text-transform:uppercase;letter-spacing:.04em}
+.sw-box input{width:100%;padding:11px 13px;border:1.5px solid var(--border);border-radius:8px;font-size:15px;margin-bottom:12px;transition:border-color .2s}
+.sw-box input:focus{outline:none;border-color:var(--g3);box-shadow:0 0 0 3px rgba(45,106,79,.12)}
+.pw-str-wrap{height:5px;background:#e5e7eb;border-radius:3px;margin:-6px 0 10px;overflow:hidden}
+.pw-str-bar{height:100%;border-radius:3px;transition:width .3s,background .3s;width:0}
+.pw-rules{font-size:11.5px;color:var(--dim);margin-bottom:12px;line-height:1.8}
+.pw-rules span{display:block}
+.pw-rules .ok{color:#10b981}
+.pw-rules .fail{color:#94a3b8}
+.sw-step-label{color:#7dc9a0;font-size:12px;font-weight:700;letter-spacing:.1em;text-align:center;text-transform:uppercase;margin-bottom:8px}
+#swErr{color:var(--red);font-size:12px;min-height:16px;text-align:center;margin-bottom:8px}
+.sw-done{text-align:center;padding:20px 0}
+.sw-done-icon{font-size:56px;margin-bottom:10px}
+.sw-done-title{color:var(--g2);font-size:18px;font-weight:900;margin-bottom:6px}
+.sw-done-sub{color:var(--muted);font-size:13px;line-height:1.6}
+
+/* ══ PHASE 2: SESSION WARNING BANNER ════════════════════ */
+#sessWarn{display:none;position:fixed;bottom:0;left:0;right:0;z-index:800;background:#1e3a5f;color:#fff;padding:11px 14px;align-items:center;justify-content:space-between;gap:10px;box-shadow:0 -3px 14px rgba(0,0,0,.35);font-size:13px}
+#sessWarn.show{display:flex}
+.sess-txt{flex:1;line-height:1.4}
+.sess-btn{background:#fbbf24;color:#1c1c1c;border:none;padding:7px 14px;border-radius:6px;font-weight:800;font-size:12px;cursor:pointer;white-space:nowrap}
+
+/* ══ PHASE 2: AI QUOTA BAR ═══════════════════════════════ */
+.quota-bar{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);padding:9px 12px;border-radius:7px;border:1px solid var(--border2);background:var(--card2);margin-bottom:12px;flex-wrap:wrap}
+.quota-dots{display:flex;gap:3px}
+.q-dot{width:11px;height:11px;border-radius:50%;background:#e5e7eb;border:1.5px solid #d1d5db;transition:background .3s}
+.q-dot.used{background:var(--g3);border-color:var(--g2)}
+.q-dot.warn{background:#f59e0b;border-color:#d97706}
+.q-dot.hot{background:var(--red2);border-color:var(--red)}
+.quota-cost{margin-left:auto;color:var(--dim);font-size:11px}
+</style>
+</head>
+<body>
+
+<!-- ══ PHASE 2: FIRST-RUN SETUP WIZARD ══════════════════ -->
+<div id="setup">
+  <div class="sw-step-label" id="swStepLbl">Step 1 of 3</div>
+  <div class="sw-prog">
+    <div class="sw-dot on" id="sd1"></div>
+    <div class="sw-dot" id="sd2"></div>
+    <div class="sw-dot" id="sd3"></div>
+  </div>
+
+  <!-- Step 1: Shop Identity -->
+  <div class="sw-step on" id="sw1">
+    <div class="sw-box">
+      <div class="sw-icon">🧵</div>
+      <div class="sw-title">Welcome to VRC<br>AI Profit Agent</div>
+      <div class="sw-hint">Let's set up your shop in 3 quick steps.<br>This takes less than 2 minutes.</div>
+      <label>Shop Name</label>
+      <input type="text" id="swShop" value="Venkata Ramana Cloth Stores" maxlength="60" oninput="san(this)">
+      <label>Owner Name</label>
+      <input type="text" id="swOwner" placeholder="Your name" maxlength="40" oninput="san(this)">
+      <div id="swErr"></div>
+      <button class="btn bg" onclick="swNext(1)">Next →</button>
+    </div>
+  </div>
+
+  <!-- Step 2: Password Creation -->
+  <div class="sw-step" id="sw2">
+    <div class="sw-box">
+      <div class="sw-icon">🔐</div>
+      <div class="sw-title">Create Your Password</div>
+      <div class="sw-hint">Only you should know this. It also protects your AI key.</div>
+      <label>New Password</label>
+      <input type="password" id="swPwd1" placeholder="At least 6 characters" oninput="pwStrength(this.value)" autocomplete="new-password">
+      <div class="pw-str-wrap"><div class="pw-str-bar" id="pwBar"></div></div>
+      <div class="pw-rules" id="pwRules">
+        <span id="pr1" class="fail">✗ At least 6 characters</span>
+        <span id="pr2" class="fail">✗ Contains a number</span>
+        <span id="pr3" class="fail">✗ Mix of letters and numbers</span>
+      </div>
+      <label>Confirm Password</label>
+      <input type="password" id="swPwd2" placeholder="Type it again" autocomplete="new-password">
+      <div id="swErr"></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn bmut" style="width:auto;padding:10px 16px" onclick="swBack(2)">← Back</button>
+        <button class="btn bg" onclick="swNext(2)">Next →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 3: Daily Target -->
+  <div class="sw-step" id="sw3">
+    <div class="sw-box">
+      <div class="sw-icon">🎯</div>
+      <div class="sw-title">Daily Revenue Goal</div>
+      <div class="sw-hint">What is a good normal day's revenue for your shop? You can change this anytime in Settings.</div>
+      <label>Daily Target (Rs)</label>
+      <input type="number" id="swTgt" value="3000" min="100" max="999999" oninput="vN(this)">
+      <div class="al info" style="display:block;margin-bottom:14px;font-size:12px">💡 Normal cloth shop in a village: Rs 2,500–6,000/day. Festival day: Rs 12,000–45,000.</div>
+      <div id="swErr"></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn bmut" style="width:auto;padding:10px 16px" onclick="swBack(3)">← Back</button>
+        <button class="btn bgold" onclick="swFinish()">✅ Complete Setup</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Done screen -->
+  <div class="sw-step" id="sw4">
+    <div class="sw-box">
+      <div class="sw-done">
+        <div class="sw-done-icon">✅</div>
+        <div class="sw-done-title">Setup Complete!</div>
+        <div class="sw-done-sub">Your shop <b id="swDoneShop"></b> is ready.<br>Please log in with your new password.</div>
+      </div>
+      <button class="btn bg" onclick="showLogin()">🔐 Go to Login →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ LOGIN ══════════════════════════════════════════════ -->
+<div id="login" style="position:fixed;inset:0;background:linear-gradient(145deg,var(--g1),var(--g2) 60%,#2d4a1e);display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;padding:24px;z-index:9998">
+  <div class="l-logo">🧵</div>
+  <div class="l-title">VENKATA RAMANA<br>CLOTH STORES</div>
+  <div class="l-sub">📍 Chintalapudi · AI Profit Agent v4</div>
+  <div class="l-box">
+    <label>Shop Password</label>
+    <input type="password" id="pw" placeholder="Enter password">
+    <div id="lErr"></div>
+    <button class="btn bg" onclick="doLogin()">🔐 Open Shop</button>
+    <p style="font-size:11px;color:var(--dim);text-align:center;margin-top:6px">Forgot password? Contact the app developer.</p>
+  </div>
+</div>
+
+<div id="app">
+  <div class="hdr">
+    <div class="hdr-top">
+      <div><div class="hdr-t">🧵 VENKATA RAMANA CLOTH STORES</div><div class="hdr-s" id="hdrDate">Chintalapudi</div></div>
+      <div class="fest-p" id="festP">🎉 Festival</div>
+    </div>
+  </div>
+  <div class="agent-bar">
+    <div class="a-dot off" id="aDot"></div>
+    <span id="aStat">AI Agent: Add Anthropic API key in Settings to activate</span>
+  </div>
+  <!-- ══ PHASE 2: SESSION IDLE WARNING ══ -->
+  <div id="sessWarn">
+    <div class="sess-txt">⏱️ <b>You've been inactive.</b> App will lock automatically in <span id="sessCountdown">10</span> minutes to protect your data.</div>
+    <button class="sess-btn" onclick="resetIdleTimer()">Keep Me Logged In</button>
+  </div>
+  <nav class="nav">
+    <button class="nb on" onclick="go('entry')" id="nb-entry">📝 Entry</button>
+    <button class="nb" onclick="go('today')" id="nb-today">📊 Today</button>
+    <button class="nb" onclick="go('agent')" id="nb-agent">🤖 Agent</button>
+    <button class="nb" onclick="go('week')" id="nb-week">📈 Week</button>
+    <button class="nb" onclick="go('khata')" id="nb-khata">📒 Khata</button>
+    <button class="nb" onclick="go('settings')" id="nb-settings">⚙️ More</button>
+  </nav>
+
+  <!-- ENTRY -->
+  <div class="pg on" id="pg-entry">
+    <div class="card" style="background:linear-gradient(135deg,#ecfdf5,#d1fae5);border-color:#6ee7b7">
+      <div class="ch" style="color:#065f46;border-color:#a7f3d0">📋 Daily Entry — 3 Steps</div>
+      <div style="display:flex;gap:0;font-size:12px;font-weight:700;color:#065f46;flex-wrap:wrap;gap:6px">
+        <span style="background:#fff;padding:5px 10px;border-radius:20px;border:1px solid #6ee7b7">① Add UPI payments</span>
+        <span style="color:#a7f3d0;align-self:center">→</span>
+        <span style="background:#fff;padding:5px 10px;border-radius:20px;border:1px solid #6ee7b7">② Enter cash + expenses</span>
+        <span style="color:#a7f3d0;align-self:center">→</span>
+        <span style="background:#fff;padding:5px 10px;border-radius:20px;border:1px solid #6ee7b7">③ Tap Save</span>
+      </div>
+    </div>
+    <div id="festCard" class="card" style="display:none">
+      <div class="ch">🎉 Festival Target Progress</div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px">
+        <span style="color:var(--muted)">Target: Rs <span id="tgtDisp">5000</span></span>
+        <b id="prgPct">0%</b>
+      </div>
+      <div class="pw"><div class="pb2" id="prgBar" style="width:0%"></div></div>
+    </div>
+    <div class="card">
+      <div class="ch">📱 UPI Payments</div>
+      <label class="fl">Paste UPI notification message</label>
+      <textarea id="upiTxt" placeholder="Received Rs 500 from Ramesh via PhonePe&#10;500 rupaye prapt hue&#10;UPI/CR/350/GooglePay&#10;Or just type: 450"></textarea>
+      <div id="pAl" class="al"></div>
+      <div class="row">
+        <button class="btn bg" onclick="parseAdd()">✅ Extract & Add</button>
+        <button class="btn bmut" onclick="testP()">🧪 Test</button>
+      </div>
+      <div class="el" id="upiList"></div>
+      <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:13px">
+        <span style="color:var(--muted)">UPI Total:</span><b id="upiTot">Rs 0</b>
+      </div>
+    </div>
+    <div class="card">
+      <div class="ch">💵 Cash Received</div>
+      <label class="fl">Cash amount (Rs)</label>
+      <input type="number" id="cashIn" placeholder="0" min="0" max="999999" oninput="vN(this)">
+    </div>
+    <div class="card">
+      <div class="ch">💸 Add Expense</div>
+      <label class="fl">Category</label>
+      <select id="eCat">
+        <option>Wholesale Fabric</option><option>Staff Wages</option><option>Electricity</option>
+        <option>Tailor Charges</option><option>Transport / Delivery</option><option>Shop Rent</option><option>Other</option>
+      </select>
+      <label class="fl">Description (optional)</label>
+      <input type="text" id="eDesc" placeholder="e.g. Banarasi sarees stock" maxlength="100" oninput="san(this)">
+      <label class="fl">Amount (Rs)</label>
+      <input type="number" id="eAmt" placeholder="0" min="1" max="999999" oninput="vN(this)">
+      <button class="btn bmut" onclick="addExp()">➕ Add Expense</button>
+      <div class="el" id="expList"></div>
+      <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:13px">
+        <span style="color:var(--muted)">Expenses Total:</span><b id="expTot" style="color:var(--red)">Rs 0</b>
+      </div>
+    </div>
+    <div class="card">
+      <div class="ch">📒 Khata — Credit Given Today</div>
+      <label class="fl">Customer Name</label>
+      <input type="text" id="khN" placeholder="Customer name" maxlength="50" oninput="san(this)">
+      <label class="fl">Amount (Rs)</label>
+      <input type="number" id="khA" placeholder="0" min="1" max="999999" oninput="vN(this)">
+      <button class="btn bmut" onclick="addKh()">➕ Add Khata Entry</button>
+    </div>
+    <div id="saveAl" class="al"></div>
+    <button class="btn bg" onclick="saveDay()">💾 Save Today's Entry</button>
+    <button class="btn bmut" onclick="loadDemo()">🎭 Load Realistic Demo Data</button>
+  </div>
+
+  <!-- TODAY -->
+  <div class="pg" id="pg-today">
+    <div id="todayCont"><div class="empty"><div class="empty-i">📊</div><p>Save today's entry first.</p></div></div>
+  </div>
+
+  <!-- AGENT -->
+  <div class="pg" id="pg-agent">
+    <div class="card">
+      <div class="ch">🤖 4-Agent Analysis Pipeline</div>
+      <!-- PHASE 2: AI Quota Counter -->
+      <div class="quota-bar" id="quotaBar">
+        <span>🤖 AI calls:</span><span style="font-weight:800">0 / 3 used today</span>
+        <div class="quota-dots"><div class="q-dot"></div><div class="q-dot"></div><div class="q-dot"></div></div>
+        <span class="quota-cost">≈ ₹0.00 spent today</span>
+      </div>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:12px">Each agent runs a real task in sequence. All 4 must complete for full AI analysis.</p>
+      <div style="display:flex;flex-direction:column;gap:8px" id="pipeViz">
+        <div class="agent-step" id="p1">
+          <div class="as-hd"><span class="as-icon">📱</span><span class="as-name">Agent 1 — UPI Parser</span><span class="as-badge" id="p1b">Waiting</span></div>
+          <div class="as-out" id="p1o"></div>
+        </div>
+        <div class="as-arrow">↓</div>
+        <div class="agent-step" id="p2">
+          <div class="as-hd"><span class="as-icon">🔍</span><span class="as-name">Agent 2 — Data Validator</span><span class="as-badge" id="p2b">Waiting</span></div>
+          <div class="as-out" id="p2o"></div>
+        </div>
+        <div class="as-arrow">↓</div>
+        <div class="agent-step" id="p3">
+          <div class="as-hd"><span class="as-icon">📊</span><span class="as-name">Agent 3 — Trend Analyst</span><span class="as-badge" id="p3b">Waiting</span></div>
+          <div class="as-out" id="p3o"></div>
+        </div>
+        <div class="as-arrow">↓</div>
+        <div class="agent-step" id="p4">
+          <div class="as-hd"><span class="as-icon">🤖</span><span class="as-name">Agent 4 — Claude AI Summary</span><span class="as-badge" id="p4b">Waiting</span></div>
+          <div class="as-out" id="p4o"></div>
+        </div>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <button class="btn bai" onclick="runAgentPipeline('daily')">🤖 Run Daily Pipeline</button>
+        <button class="btn bai" onclick="runAgentPipeline('weekly')">📈 Run Weekly Pipeline</button>
+      </div>
+      <div id="aiOut"></div>
+      <div class="al info" style="display:block;margin-top:10px;font-size:12px">⚠️ AI output is guidance only — not certified financial advice. Always verify with your own records.</div>
+    </div>
+    <div class="card">
+      <div class="ch">📊 Trend Analyst — Rule-Based Insights</div>
+      <div id="trendOut"><div class="empty"><div class="empty-i">📈</div><p>Save 2+ days of data to see trends.</p></div></div>
+    </div>
+  </div>
+
+  <!-- WEEK -->
+  <div class="pg" id="pg-week">
+    <div class="card">
+      <div class="ch">📈 7-Day Profit Chart</div>
+      <div class="cw"><canvas id="wkChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="ch">🎮 Realistic Simulation — Andhra Pradesh Cloth Shop</div>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Based on real market data: Normal day Rs 2,500–6,000. Festival day Rs 12,000–45,000. 25–40% margins.</p>
+      <div class="row" style="margin-bottom:10px">
+        <button class="btn bmut bsm" onclick="sim('normal')">📅 Normal Week</button>
+        <button class="btn bgold bsm" onclick="sim('festival')">🎉 Festival Week</button>
+      </div>
+      <div id="simOut"></div>
+    </div>
+    <div class="card" id="wkStats"><div class="empty"><div class="empty-i">📅</div><p>Save 2+ days to see weekly stats.</p></div></div>
+  </div>
+
+  <!-- KHATA -->
+  <div class="pg" id="pg-khata">
+    <div class="card">
+      <div class="ch">📒 Khata Book — Credit Owed to Shop</div>
+      <div id="khBook"><div class="empty"><div class="empty-i">🙏</div><p>No khata entries yet.</p></div></div>
+      <div id="khTotRow" style="display:none;margin-top:12px;padding-top:10px;border-top:1px solid var(--border2)">
+        <div style="display:flex;justify-content:space-between;font-weight:700"><span>Total Outstanding:</span><span style="color:var(--red)" id="khTot">Rs 0</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="pg" id="pg-settings">
+    <div class="card">
+      <div class="ch">🔑 AI Agent Configuration</div>
+      <div class="al info" style="display:block;margin-bottom:12px;font-size:12px">Get free API key at console.anthropic.com. Stored only on this device.</div>
+      <div class="al warn" style="display:block;margin-bottom:12px;font-size:12px">⚠️ Do not use this app on shared or public devices. Your API key and shop data are stored in this browser only.</div>
+      <label class="fl">Anthropic API Key (sk-ant-...)</label>
+      <input type="password" id="apiK" placeholder="sk-ant-..." oninput="san(this)">
+      <button class="btn bai" onclick="saveKey()">💾 Save API Key & Activate Agent</button>
+      <div id="keyAl" class="al"></div>
+    </div>
+    <div class="card">
+      <div class="ch">⚙️ Shop Settings</div>
+      <div class="tr">
+        <div><div class="tl">🎉 Festival Mode</div><div class="ts">Sankranti · Ugadi · Dussehra · Diwali</div></div>
+        <label class="tg"><input type="checkbox" id="fTog" onchange="togFest()"><span class="slr"></span></label>
+      </div>
+      <div class="tr" style="margin-top:8px">
+        <div><div class="tl">Normal Daily Target (Rs)</div><div class="ts">Default revenue goal</div></div>
+        <input type="number" id="dTgt" value="3000" min="100" max="999999" style="width:90px;margin-bottom:0" oninput="vN(this)" onchange="vN(this)">
+      </div>
+    </div>
+    <div class="card">
+      <div class="ch">📲 WhatsApp Daily Report</div>
+      <div class="wa-msg" id="waMsg">Save today's entry to generate report.</div>
+      <button class="btn bgold" style="margin-top:10px" onclick="copyWA()">📋 Copy & Open WhatsApp</button>
+      <div id="waAl" class="al"></div>
+    </div>
+    <div class="card">
+      <div class="ch">📥 Export & Backup Data</div>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:10px">⚠️ Your data lives only on this device. Back up regularly so you never lose your records.</p>
+      <button class="btn bmut" onclick="exportCSV()">⬇️ Download CSV (Excel / Sheets)</button>
+      <button class="btn bg" onclick="exportJSON()">💾 Download Full Backup (.json)</button>
+      <div style="margin-top:8px">
+        <label class="fl">Restore from backup file (.json)</label>
+        <input type="file" id="restoreFile" accept=".json" style="margin-bottom:8px;padding:7px;font-size:13px" onchange="importJSON(this)">
+      </div>
+      <div id="backupAl" class="al"></div>
+    </div>
+    <div class="card">
+      <div class="ch">🗑️ Danger Zone</div>
+      <button class="btn bred" onclick="clearAll()">🗑️ Delete All Data</button>
+    </div>
+    <div class="card">
+      <div class="ch">🔒 Logout</div>
+      <button class="btn bmut" onclick="doLogout()">🔐 Logout</button>
+    </div>
+    <!-- PHASE 2: Change Password -->
+    <div class="card">
+      <div class="ch">🔑 Change Password</div>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Changing your password will re-encrypt your stored API key with the new password.</p>
+      <label class="fl">Current Password</label>
+      <input type="password" id="cpOld" placeholder="Enter current password" autocomplete="current-password">
+      <label class="fl">New Password (min 6 chars)</label>
+      <input type="password" id="cpNew1" placeholder="New password" autocomplete="new-password">
+      <label class="fl">Confirm New Password</label>
+      <input type="password" id="cpNew2" placeholder="Repeat new password" autocomplete="new-password">
+      <button class="btn bg" onclick="changePassword()">🔄 Change Password</button>
+      <div id="cpAl" class="al"></div>
+    </div>
+    <!-- PHASE 2: About -->
+    <div class="card">
+      <div class="ch">ℹ️ About This App</div>
+      <div id="aboutInfo" style="font-size:13px;color:var(--muted);line-height:2"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══ PHASE 2: STORAGE KEYS & SESSION STATE ══════════════
+const SK='vrc_v2';            // main data (records, khata, prefs)
+const SETUP_SK='vrc_setup';   // first-run setup (shop name, pwd hash, salt)
+const SEC_SK='vrc_sec';       // encrypted API key (AES-GCM blob)
+const QUOTA_SK='vrc_quota';   // daily AI call counter
+
+let sessionKey=null;  // CryptoKey in memory only — cleared on logout
+// NOTE: PASS constant removed in v4. Password is SHA-256 hashed and
+// stored in localStorage after first-run setup. Never stored in source.
+const PROFILE={
+  normal:{min:2500,max:6000,expPct:.52,dayMult:[.85,.90,.95,1,1.05,1.35,1.20]},
+  festival:{min:12000,max:45000,expPct:.38,dayMult:[.90,.92,.95,1,1.05,1.40,1.30]}
+};
+let S={upi:[],exp:[],khT:[],allR:[],allK:[],fest:false,tgt:3000,apiKey:''};
+let wkC=null;
+
+// sv/ld: apiKey is NO LONGER saved here — it lives encrypted in SEC_SK
+function sv(){try{localStorage.setItem(SK,JSON.stringify({allR:S.allR,allK:S.allK,fest:S.fest,tgt:S.tgt}));}catch(e){}}
+function ld(){try{const d=JSON.parse(localStorage.getItem(SK)||'{}');if(Array.isArray(d.allR))S.allR=d.allR;if(Array.isArray(d.allK))S.allK=d.allK;if(typeof d.fest==='boolean')S.fest=d.fest;if(typeof d.tgt==='number')S.tgt=d.tgt;}catch(e){}}
+function san(el){el.value=el.value.replace(/<[^>]*>/g,'').replace(/[<>"'`\\]/g,'');}
+function vN(el){let v=parseFloat(el.value);if(isNaN(v)||v<0)el.value='';if(v>999999)el.value=999999;}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function Rs(n){return 'Rs '+Number(n||0).toLocaleString('en-IN');}
+function td(){return new Date().toISOString().slice(0,10);}
+function sAl(el,t,m){if(!el)return;el.className='al '+t;el.textContent=m;el.style.display='block';setTimeout(()=>{if(el)el.style.display='none';},4500);}
+
+async function doLogin(){
+  const p=document.getElementById('pw').value;
+  const e=document.getElementById('lErr');
+  if(!p){e.textContent='Enter password.';return;}
+  const setup=getSetup();
+  if(!setup){e.textContent='Setup not complete. Please refresh.';return;}
+  try{
+    const enteredHash=await sha256hex(p);
+    if(enteredHash!==setup.pwdHash){
+      e.textContent='❌ Wrong password.';
+      document.getElementById('pw').value='';
+      document.getElementById('pw').focus();
+      return;
+    }
+    // Correct password — derive session encryption key
+    const salt=b64d(setup.salt);
+    sessionKey=await deriveAESKey(p,salt);
+    // Decrypt API key from secure storage into memory
+    await loadDecryptedKey();
+    // Load data and show app
+    document.getElementById('login').style.display='none';
+    document.getElementById('app').style.display='block';
+    ld();init();
+    startIdleTimer();
+    renderQuotaBadge();
+  }catch(err){e.textContent='Login error: '+err.message;}
+}
+
+function doLogout(){
+  if(!confirm('Logout?'))return;
+  sessionKey=null;      // wipe crypto key from memory
+  S.apiKey='';          // wipe from in-memory state
+  stopIdleTimer();
+  document.getElementById('app').style.display='none';
+  document.getElementById('login').style.display='flex';
+  document.getElementById('pw').value='';
+  document.getElementById('sessWarn').classList.remove('show');
+  resetT();
+}
+
+function parseUPI(txt){
+  if(!txt||typeof txt!=='string')return null;
+  txt=txt.trim();if(!txt||txt.length>500)return null;
+  const hm={'panch sau':500,'paanch sau':500,'ek sau':100,'do sau':200,'teen sau':300,'char sau':400,'chhe sau':600,'saat sau':700,'aath sau':800,'nau sau':900,'ek hazaar':1000,'do hazaar':2000,'teen hazaar':3000,'char hazaar':4000,'panch hazaar':5000};
+  const tl=txt.toLowerCase();
+  for(const[p,v] of Object.entries(hm)){if(tl.includes(p))return v;}
+  const uc=tl.match(/upi\/cr\/([0-9]+)\//);if(uc){const v=parseInt(uc[1]);if(v>0&&v<1000000)return v;}
+  const ps=[/(?:rs\.?|inr|rupees?|rupaye?|₹)\s*([0-9,]+(?:\.[0-9]{1,2})?)/,/([0-9,]+(?:\.[0-9]{1,2})?)\s*(?:rs\.?|inr|rupees?|rupaye?|₹)/,/(?:prapt\s*hue?|received|credited|payment\s*of|aaya|aaye)\s*(?:rs\.?|₹)?\s*([0-9,]+)/,/([0-9,]+)\s*(?:aaya|aaye|prapt)/,/^([0-9,]+(?:\.[0-9]{1,2})?)$/];
+  for(const p of ps){const m=tl.match(p);if(m){const v=parseFloat(m[1].replace(/,/g,''));if(!isNaN(v)&&v>0&&v<1000000)return Math.round(v);}}
+  return null;
+}
+
+function parseAdd(){
+  const txt=document.getElementById('upiTxt').value.trim();
+  const al=document.getElementById('pAl');
+  if(!txt){sAl(al,'warn','⚠️ Paste a UPI message first.');return;}
+  const amt=parseUPI(txt);
+  if(amt){
+    // Duplicate check: same raw text already added today?
+    const normalised=txt.toLowerCase().replace(/\s+/g,' ').substring(0,120);
+    const isDupText=S.upi.some(e=>e.text.toLowerCase()===normalised);
+    // Also flag if exact same amount added 3+ times (likely accidental)
+    const sameAmtCount=S.upi.filter(e=>e.amount===amt).length;
+    if(isDupText){sAl(al,'warn','⚠️ This UPI message was already added. Skipped to prevent double-counting.');return;}
+    if(sameAmtCount>=3){const ok=confirm('Rs '+amt+' has already been added '+sameAmtCount+' times today.\nAdd again? (Only confirm if these are genuinely different payments.)');if(!ok)return;}
+    S.upi.push({text:normalised,amount:amt});
+    document.getElementById('upiTxt').value='';
+    sAl(al,'ok','✅ Extracted '+Rs(amt)+' — added! ('+S.upi.length+' total UPI entries)');
+    rUPI();
+  }else{
+    sAl(al,'err','❌ Could not detect amount.');
+    const r=prompt('Manual entry — type amount in Rs:');
+    if(r===null)return;
+    const v=parseInt(r.replace(/,/g,''));
+    if(!v||v<=0||v>=1000000){alert('Invalid amount.');return;}
+    S.upi.push({text:'Manual entry',amount:v});
+    document.getElementById('upiTxt').value='';
+    rUPI();
+  }
+}
+function testP(){const txt=document.getElementById('upiTxt').value.trim();const al=document.getElementById('pAl');if(!txt){sAl(al,'warn','⚠️ Enter a message.');return;}const a=parseUPI(txt);if(a)sAl(al,'info','🧪 Detected: '+Rs(a));else sAl(al,'err','🧪 Cannot extract amount.');}
+
+function rUPI(){
+  const el=document.getElementById('upiList');
+  const tot=S.upi.reduce((a,e)=>a+e.amount,0);
+  document.getElementById('upiTot').textContent=Rs(tot);
+  el.innerHTML=S.upi.map((e,i)=>`<div class="en eu"><span class="et">${esc(e.text)}</span><span class="ea">${Rs(e.amount)}</span><button class="db" onclick="dU(${i})">✕</button></div>`).join('');
+  updP(tot);
+}
+function dU(i){if(i>=0&&i<S.upi.length){S.upi.splice(i,1);rUPI();}}
+
+function addExp(){
+  const cat=document.getElementById('eCat').value;
+  const desc=document.getElementById('eDesc').value.trim().substring(0,100);
+  const amt=parseInt(document.getElementById('eAmt').value);
+  if(!amt||amt<=0||amt>=1000000){alert('Enter valid expense amount.');return;}
+  S.exp.push({cat,desc,amount:amt});document.getElementById('eAmt').value='';document.getElementById('eDesc').value='';rExp();
+}
+function rExp(){
+  const el=document.getElementById('expList');
+  const tot=S.exp.reduce((a,e)=>a+e.amount,0);
+  document.getElementById('expTot').textContent=Rs(tot);
+  el.innerHTML=S.exp.map((e,i)=>`<div class="en ee"><span class="et"><b>${esc(e.cat)}</b>${e.desc?' — '+esc(e.desc):''}</span><span class="ea">${Rs(e.amount)}</span><button class="db" onclick="dE(${i})">✕</button></div>`).join('');
+}
+function dE(i){if(i>=0&&i<S.exp.length){S.exp.splice(i,1);rExp();}}
+
+function addKh(){
+  const n=document.getElementById('khN').value.trim().substring(0,50);
+  const a=parseInt(document.getElementById('khA').value);
+  if(!n){alert('Enter customer name.');return;}
+  if(!a||a<=0||a>=1000000){alert('Enter valid amount.');return;}
+  S.khT.push({name:n,amount:a});S.allK.push({name:n,amount:a,paid:false,date:td()});
+  document.getElementById('khN').value='';document.getElementById('khA').value='';
+  alert('✅ Khata added: '+n+' — '+Rs(a));
+}
+
+function saveDay(){
+  const al=document.getElementById('saveAl');
+  const cash=parseInt(document.getElementById('cashIn').value)||0;
+  const upiT=S.upi.reduce((a,e)=>a+e.amount,0);
+  const expT=S.exp.reduce((a,e)=>a+e.amount,0);
+  const khG=S.khT.reduce((a,e)=>a+e.amount,0);
+  const rev=upiT+cash, profit=rev-expT;
+  if(rev===0&&expT===0){sAl(al,'warn','⚠️ Add entries first.');return;}
+  const rec={date:td(),upi:upiT,cash,revenue:rev,expenses:expT,profit,khataGiven:khG,expBreakdown:[...S.exp],timestamp:Date.now()};
+  S.allR=S.allR.filter(r=>r.date!==td());S.allR.push(rec);sv();
+  sAl(al,'ok','✅ Saved! '+(profit>=0?'Profit':'Loss')+': '+Rs(Math.abs(profit)));
+  bToday(rec);bWeek();bWA(rec);bTrend();updAgentStat();
+}
+
+function bToday(rec){
+  if(!rec)rec=S.allR.find(r=>r.date===td());
+  const el=document.getElementById('todayCont');
+  if(!rec){el.innerHTML='<div class="empty"><div class="empty-i">📊</div><p>No entry saved for today yet.</p></div>';return;}
+  const pct=rec.revenue>0?Math.round(rec.expenses/rec.revenue*100):0;
+  const mg=rec.revenue>0?Math.round(rec.profit/rec.revenue*100):0;
+  const pc=rec.profit>0?'profit':rec.profit<0?'loss':'zero';
+  const pl=rec.profit>0?'✅ Profitable Day!':rec.profit<0?'❌ Loss Today':'🟡 Break Even';
+  let w='';
+  if(pct>40)w+=`<div class="al warn" style="display:block">⚠️ Expenses = ${pct}% of revenue. Keep below 40%.</div>`;
+  if(rec.khataGiven>0)w+=`<div class="al info" style="display:block">📒 ${Rs(rec.khataGiven)} on khata today — collect soon!</div>`;
+  if(rec.profit<0)w+=`<div class="al err" style="display:block">❌ Loss day. Reduce expenses or boost sales tomorrow.</div>`;
+  el.innerHTML=`
+    <div class="pb ${pc}"><div class="pb-tag">${pl}</div><div class="pb-num">${Rs(Math.abs(rec.profit))}</div><div class="pb-sub">Net ${rec.profit>=0?'profit':'loss'} · ${rec.date} · Margin ${mg}%</div></div>
+    ${w}
+    <div class="g2" style="margin-bottom:12px">
+      <div class="sb sg"><div class="sl">📱 UPI</div><div class="sv">${Rs(rec.upi)}</div></div>
+      <div class="sb sg"><div class="sl">💵 Cash</div><div class="sv">${Rs(rec.cash)}</div></div>
+      <div class="sb sr"><div class="sl">💸 Expenses</div><div class="sv">${Rs(rec.expenses)}</div></div>
+      <div class="sb sy"><div class="sl">📊 Revenue</div><div class="sv">${Rs(rec.revenue)}</div></div>
+    </div>
+    ${rec.expBreakdown&&rec.expBreakdown.length?`<div class="card"><div class="ch">💸 Expense Breakdown</div>${rec.expBreakdown.map(e=>`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border2);font-size:13px"><span style="color:var(--muted)">${esc(e.cat)}${e.desc?' — '+esc(e.desc):''}</span><b style="color:var(--red)">${Rs(e.amount)}</b></div>`).join('')}</div>`:''}
+    <button class="btn bai" onclick="go('agent')">🤖 Run AI Analysis →</button>`;
+}
+
+// ══════════════════════════════════════════════════════════
+//  PHASE 2: CRYPTO ENGINE — SHA-256 + PBKDF2 + AES-GCM
+// ══════════════════════════════════════════════════════════
+
+async function sha256hex(str){
+  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+async function deriveAESKey(password,salt){
+  const raw=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),{name:'PBKDF2'},false,['deriveKey']);
+  return crypto.subtle.deriveKey(
+    {name:'PBKDF2',salt,iterations:100000,hash:'SHA-256'},
+    raw,{name:'AES-GCM',length:256},false,['encrypt','decrypt']
+  );
+}
+
+async function encryptStr(plaintext,cryptoKey){
+  const iv=crypto.getRandomValues(new Uint8Array(12));
+  const enc=await crypto.subtle.encrypt({name:'AES-GCM',iv},cryptoKey,new TextEncoder().encode(plaintext));
+  return{iv:b64e(iv),data:b64e(new Uint8Array(enc))};
+}
+
+async function decryptStr(encObj,cryptoKey){
+  try{
+    const iv=b64d(encObj.iv),data=b64d(encObj.data);
+    const dec=await crypto.subtle.decrypt({name:'AES-GCM',iv},cryptoKey,data);
+    return new TextDecoder().decode(dec);
+  }catch{return null;}
+}
+
+function b64e(buf){return btoa(String.fromCharCode(...new Uint8Array(buf)));}
+function b64d(str){return Uint8Array.from(atob(str),c=>c.charCodeAt(0));}
+
+// ══════════════════════════════════════════════════════════
+//  PHASE 2: SETUP STORAGE HELPERS
+// ══════════════════════════════════════════════════════════
+
+function getSetup(){
+  try{return JSON.parse(localStorage.getItem(SETUP_SK)||'null');}catch{return null;}
+}
+
+function saveSetup(obj){
+  localStorage.setItem(SETUP_SK,JSON.stringify(obj));
+}
+
+// ══════════════════════════════════════════════════════════
+//  PHASE 2: FIRST-RUN SETUP WIZARD
+// ══════════════════════════════════════════════════════════
+
+// Temporary store across wizard steps
+let swData={shopName:'',ownerName:'',password:'',target:3000};
+
+function checkFirstRun(){
+  const setup=getSetup();
+  if(!setup||!setup.done||!setup.pwdHash){
+    document.getElementById('setup').classList.add('show');
+  } else {
+    showLogin();
+  }
+}
+
+function showLogin(){
+  document.getElementById('setup').classList.remove('show');
+  document.getElementById('login').style.display='flex';
+  setTimeout(()=>{const p=document.getElementById('pw');if(p)p.focus();},100);
+}
+
+function swSetStep(n){
+  [1,2,3,4].forEach(i=>{
+    document.getElementById('sw'+i).classList.toggle('on',i===n);
+    const dot=document.getElementById('sd'+i);
+    if(dot)dot.classList.toggle('on',i===n);
+  });
+  const labels=['Step 1 of 3','Step 2 of 3','Step 3 of 3',''];
+  const lbl=document.getElementById('swStepLbl');
+  if(lbl)lbl.textContent=labels[n-1]||'';
+  // clear old error
+  document.querySelectorAll('#swErr').forEach(e=>e.textContent='');
+}
+
+function swNext(step){
+  if(step===1){
+    const shop=document.getElementById('swShop').value.trim();
+    const owner=document.getElementById('swOwner').value.trim();
+    const errs=document.querySelectorAll('#swErr');
+    if(!shop){errs.forEach(e=>e.textContent='Enter your shop name.');return;}
+    if(!owner){errs.forEach(e=>e.textContent='Enter the owner name.');return;}
+    swData.shopName=shop;swData.ownerName=owner;
+    swSetStep(2);
+    setTimeout(()=>{const p=document.getElementById('swPwd1');if(p)p.focus();},100);
+  } else if(step===2){
+    const p1=document.getElementById('swPwd1').value;
+    const p2=document.getElementById('swPwd2').value;
+    const errs=document.querySelectorAll('#swErr');
+    if(p1.length<6){errs.forEach(e=>e.textContent='Password must be at least 6 characters.');return;}
+    if(p1!==p2){errs.forEach(e=>e.textContent='Passwords do not match.');return;}
+    swData.password=p1;
+    swSetStep(3);
+  }
+}
+
+function swBack(step){
+  swSetStep(step-1);
+}
+
+function pwStrength(val){
+  const bar=document.getElementById('pwBar');
+  const pr1=document.getElementById('pr1');
+  const pr2=document.getElementById('pr2');
+  const pr3=document.getElementById('pr3');
+  if(!bar)return;
+  const hasLen=val.length>=6;
+  const hasNum=/\d/.test(val);
+  const hasMix=/[a-zA-Z]/.test(val)&&/\d/.test(val);
+  const score=(hasLen?1:0)+(hasNum?1:0)+(hasMix&&val.length>=8?1:0);
+  const w=['0%','35%','65%','100%'][score];
+  const bg=['#94a3b8','#f59e0b','#22c55e','#16a34a'][score];
+  bar.style.width=w;bar.style.background=bg;
+  if(pr1)pr1.className=hasLen?'ok':'fail',pr1.textContent=(hasLen?'✓':'✗')+' At least 6 characters';
+  if(pr2)pr2.className=hasNum?'ok':'fail',pr2.textContent=(hasNum?'✓':'✗')+' Contains a number';
+  if(pr3)pr3.className=hasMix?'ok':'fail',pr3.textContent=(hasMix?'✓':'✗')+' Mix of letters and numbers';
+}
+
+async function swFinish(){
+  const tgt=parseInt(document.getElementById('swTgt').value)||3000;
+  swData.target=tgt;
+  const errs=document.querySelectorAll('#swErr');
+  try{
+    // Generate salt for key derivation
+    const salt=crypto.getRandomValues(new Uint8Array(16));
+    const saltB64=b64e(salt);
+    // Hash the password
+    const pwdHash=await sha256hex(swData.password);
+    // Derive the session key immediately (so user is "logged in" after setup)
+    sessionKey=await deriveAESKey(swData.password,salt);
+    // Save setup data
+    saveSetup({
+      done:true,
+      shopName:swData.shopName,
+      ownerName:swData.ownerName,
+      pwdHash,
+      salt:saltB64,
+      target:tgt,
+      createdAt:new Date().toISOString()
+    });
+    // Save target into main data store
+    S.tgt=tgt;sv();
+    // Show done screen
+    swSetStep(4);
+    const doneShop=document.getElementById('swDoneShop');
+    if(doneShop)doneShop.textContent=swData.shopName;
+    // Clear sensitive data from memory
+    swData.password='';
+  }catch(err){
+    errs.forEach(e=>e.textContent='Setup error: '+err.message);
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  PHASE 2: IDLE SESSION TIMER (2 hours)
+// ══════════════════════════════════════════════════════════
+
+const IDLE_LIMIT_MS = 2 * 60 * 60 * 1000;   // 2 hours
+const WARN_BEFORE_MS = 15 * 60 * 1000;        // warn at 15min remaining
+let idleTimerInterval=null;
+let lastActivity=Date.now();
+let sessWarnShown=false;
+
+function startIdleTimer(){
+  lastActivity=Date.now();
+  sessWarnShown=false;
+  // Listen for any user interaction
+  ['click','keypress','touchstart','scroll','mousemove'].forEach(ev=>{
+    document.addEventListener(ev,_onActivity,{passive:true});
+  });
+  // Check every 30 seconds
+  idleTimerInterval=setInterval(_checkIdle,30000);
+}
+
+function stopIdleTimer(){
+  if(idleTimerInterval){clearInterval(idleTimerInterval);idleTimerInterval=null;}
+  ['click','keypress','touchstart','scroll','mousemove'].forEach(ev=>{
+    document.removeEventListener(ev,_onActivity);
+  });
+  sessWarnShown=false;
+}
+
+function _onActivity(){
+  lastActivity=Date.now();
+  if(sessWarnShown){
+    document.getElementById('sessWarn').classList.remove('show');
+    sessWarnShown=false;
+  }
+}
+
+function resetIdleTimer(){
+  _onActivity();
+  sAl(document.getElementById('saveAl'),'ok','✅ Session extended. You are still logged in.');
+}
+
+function _checkIdle(){
+  const idle=Date.now()-lastActivity;
+  const remaining=IDLE_LIMIT_MS-idle;
+  if(remaining<=0){
+    stopIdleTimer();
+    alert('🔒 Logged out automatically after 2 hours of inactivity to protect your data.');
+    doLogout();
+    return;
+  }
+  if(remaining<=WARN_BEFORE_MS&&!sessWarnShown){
+    const mins=Math.ceil(remaining/60000);
+    const countdown=document.getElementById('sessCountdown');
+    if(countdown)countdown.textContent=mins;
+    document.getElementById('sessWarn').classList.add('show');
+    sessWarnShown=true;
+  }
+  // Update countdown if warning is visible
+  if(sessWarnShown){
+    const mins=Math.ceil(remaining/60000);
+    const countdown=document.getElementById('sessCountdown');
+    if(countdown)countdown.textContent=mins;
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  PHASE 2: AI QUOTA TRACKER (5 calls/day, no hard block)
+// ══════════════════════════════════════════════════════════
+
+function getQuota(){
+  try{
+    const q=JSON.parse(localStorage.getItem(QUOTA_SK)||'{}');
+    if(q.date===td())return{used:q.count||0,max:3};
+    return{used:0,max:3};
+  }catch{return{used:0,max:3};}
+}
+
+function bumpQuota(){
+  const q=getQuota();
+  const newCount=(q.used||0)+1;
+  localStorage.setItem(QUOTA_SK,JSON.stringify({date:td(),count:newCount}));
+  renderQuotaBadge();
+  return newCount;
+}
+
+function renderQuotaBadge(){
+  const el=document.getElementById('quotaBar');
+  if(!el)return;
+  const q=getQuota();
+  const dots=Array(q.max).fill(0).map((_,i)=>{
+    let cls='';
+    if(i<q.used){cls=q.used>=q.max?'hot':q.used>=2?'warn':'used';}
+    return `<div class="q-dot ${cls}"></div>`;
+  }).join('');
+  const costRs=(q.used*0.70).toFixed(2); // ~₹0.70 per Sonnet call
+  const colour=q.used>=3?'var(--red)':q.used>=2?'#b45309':'var(--muted)';
+  const label=q.used>=3
+    ?`<span style="color:var(--red);font-weight:800">Limit reached for today</span>`
+    :`<span style="font-weight:800;color:${colour}">${q.used} / ${q.max} used today</span>`;
+  el.innerHTML=`<span>🤖 AI calls:</span>${label}<div class="quota-dots">${dots}</div><span class="quota-cost">≈ ₹${costRs} spent today</span>`;
+}
+
+// ══════════════════════════════════════════════════════════
+
+function setPipeStep(id,state,badgeText,outputHTML){
+  const el=document.getElementById(id);
+  const badge=document.getElementById(id+'b');
+  const out=document.getElementById(id+'o');
+  if(!el)return;
+  el.className='agent-step '+state;
+  if(badge){badge.className='as-badge '+state;badge.textContent=badgeText;}
+  if(out){
+    if(outputHTML){out.innerHTML=outputHTML;out.className='as-out show';}
+    else{out.className='as-out';}
+  }
+}
+
+function resetPipe(){
+  ['p1','p2','p3','p4'].forEach(id=>{setPipeStep(id,'','Waiting','');});
+  document.getElementById('aiOut').innerHTML='';
+}
+
+async function runAgentPipeline(type){
+  const key=S.apiKey;
+  const out=document.getElementById('aiOut');
+  resetPipe();
+
+  // ── AGENT 1: UPI Parser ──────────────────────────────
+  setPipeStep('p1','running','Running…','');
+  await delay(400);
+  const rec=S.allR.find(r=>r.date===td());
+  const last7=S.allR.slice(-7);
+
+  if(type==='daily'&&!rec){
+    setPipeStep('p1','fail','Blocked','No entry saved for today.');
+    out.innerHTML=`<div class="al warn" style="display:block;margin-top:10px">⚠️ Save today's entry first, then run the pipeline.</div>`;return;
+  }
+  if(type==='weekly'&&last7.length<2){
+    setPipeStep('p1','fail','Blocked','Need 2+ days of data.');
+    out.innerHTML=`<div class="al warn" style="display:block;margin-top:10px">⚠️ Save at least 2 days of data for weekly analysis.</div>`;return;
+  }
+
+  const upiCount=type==='daily'?(rec.expBreakdown?rec.expBreakdown.filter(e=>e).length:0):last7.length;
+  const totalUPI=type==='daily'?rec.upi:last7.reduce((a,r)=>a+r.upi,0);
+  const totalCash=type==='daily'?rec.cash:last7.reduce((a,r)=>a+r.cash,0);
+  const upiRatio=totalUPI+totalCash>0?Math.round(totalUPI/(totalUPI+totalCash)*100):0;
+
+  setPipeStep('p1','done','✅ Done',
+    `Loaded <b>${type==='daily'?'today\'s entry':'last '+last7.length+' days'}</b> · UPI: ${Rs(totalUPI)} (${upiRatio}%) · Cash: ${Rs(totalCash)} (${100-upiRatio}%)`);
+
+  // ── AGENT 2: Data Validator ──────────────────────────
+  await delay(500);
+  setPipeStep('p2','running','Running…','');
+  await delay(600);
+
+  const warnings=[];
+  const passed=[];
+
+  if(type==='daily'){
+    const avgRev=S.allR.length>1?Math.round(S.allR.slice(-8,-1).reduce((a,r)=>a+r.revenue,0)/Math.max(S.allR.slice(-8,-1).length,1)):0;
+    // Anomaly: revenue > 3× recent average
+    if(avgRev>0&&rec.revenue>avgRev*3&&!S.fest){
+      warnings.push(`⚠️ Revenue ${Rs(rec.revenue)} is 3× above your recent average ${Rs(avgRev)} — did you enable Festival Mode?`);
+    } else { passed.push('✅ Revenue within expected range'); }
+    // Anomaly: expenses > 80% of revenue
+    const expPct=rec.revenue>0?Math.round(rec.expenses/rec.revenue*100):0;
+    if(expPct>80){warnings.push(`⚠️ Expenses are ${expPct}% of revenue — unusually high. Check for data entry errors.`);}
+    else{passed.push('✅ Expense ratio looks normal ('+expPct+'% of revenue)');}    // Khata check
+    if(rec.khataGiven>rec.revenue*0.5&&rec.revenue>0){warnings.push('⚠️ Khata given today is over 50% of revenue — high credit risk.');}
+    else if(rec.khataGiven>0){passed.push('✅ Khata amount is within safe range');}
+    // Zero revenue
+    if(rec.revenue===0&&rec.expenses>0){warnings.push('⚠️ Zero revenue but expenses recorded — is this correct?');}
+    else if(rec.revenue>0){passed.push('✅ Revenue and expenses both recorded');}
+  } else {
+    const lossDays=last7.filter(r=>r.profit<0).length;
+    if(lossDays>=3){warnings.push(`⚠️ ${lossDays} out of ${last7.length} days were loss days — serious trend.`);}
+    else{passed.push(`✅ ${last7.length-lossDays} of ${last7.length} days profitable`);}
+    const avgMg=Math.round(last7.reduce((a,r)=>a+(r.revenue>0?r.profit/r.revenue*100:0),0)/last7.length);
+    if(avgMg<15){warnings.push(`⚠️ Average margin is only ${avgMg}% — well below the 25-40% target.`);}
+    else{passed.push(`✅ Average margin is ${avgMg}%`);}
+  }
+
+  const valState=warnings.length>0?'warn':'done';
+  const valBadge=warnings.length>0?`⚠️ ${warnings.length} Warning${warnings.length>1?'s':''}`:'✅ Passed';
+  const valHTML=[...passed,...warnings].map(w=>`<div style="margin-bottom:3px">${esc(w)}</div>`).join('');
+  setPipeStep('p2',valState,valBadge,valHTML);
+
+  // ── AGENT 3: Trend Analyst ───────────────────────────
+  await delay(500);
+  setPipeStep('p3','running','Running…','');
+  await delay(700);
+
+  const recs=S.allR.slice(-14);
+  let trendHTML='';
+  if(recs.length>=2){
+    const avgR=Math.round(recs.reduce((a,r)=>a+r.revenue,0)/recs.length);
+    const avgP=Math.round(recs.reduce((a,r)=>a+r.profit,0)/recs.length);
+    const avgMg=Math.round(recs.reduce((a,r)=>a+(r.revenue>0?r.profit/r.revenue*100:0),0)/recs.length);
+    const half=Math.floor(recs.length/2);
+    const f1=recs.slice(0,half).reduce((a,r)=>a+r.profit,0)/half;
+    const f2=recs.slice(half).reduce((a,r)=>a+r.profit,0)/(recs.length-half);
+    const trend=f2>f1*1.05?'📈 Improving':f2<f1*0.95?'📉 Declining':'➡️ Stable';
+    const upiPct=Math.round(recs.reduce((a,r)=>a+(r.revenue>0?r.upi/r.revenue:0),0)/recs.length*100);
+    trendHTML=`Avg revenue: <b>${Rs(avgR)}/day</b> · Avg profit: <b>${Rs(avgP)}</b> · Margin: <b>${avgMg}%</b> · UPI mix: <b>${upiPct}%</b> · Trend: <b>${trend}</b>`;
+    setPipeStep('p3','done','✅ Done',trendHTML);
+  } else {
+    setPipeStep('p3','warn','Limited data','Only '+recs.length+' day(s) saved — need 2+ for trend analysis.');
+    trendHTML='Insufficient history.';
+  }
+
+  // ── AGENT 4: Claude AI Summary ───────────────────────
+  await delay(500);
+  if(!key||!key.startsWith('sk-ant-')){
+    setPipeStep('p4','fail','No API Key','Add Anthropic API key in Settings → More to enable AI analysis.');
+    out.innerHTML=`<div class="al warn" style="display:block;margin-top:10px">⚠️ Agents 1–3 completed. Add an Anthropic API key in <b>⚙️ More → Settings</b> to unlock Agent 4 (AI Summary).<br><br>The trend stats above are already useful insights!</div>`;
+    return;
+  }
+
+  setPipeStep('p4','running','Calling Claude…',`<div class="ld"><div class="sp2"></div><span>Claude is reading your shop data…</span></div>`);
+
+  // ── PHASE 2: Quota check + bump ──
+  const quota=getQuota();
+  if(quota.used>=quota.max){
+    setPipeStep('p4','warn','Quota Reached',`You've used all ${quota.max} AI calls for today. Resets at midnight. Agents 1–3 stats are still shown above.`);
+    document.getElementById('aiOut').innerHTML=`<div class="al warn" style="display:block;margin-top:10px">⚠️ Daily AI limit reached (${quota.max} calls). Come back tomorrow, or the rule-based insights from Agents 1–3 above are already useful!</div>`;
+    return;
+  }
+  bumpQuota(); // Count this call
+
+  let prompt='';
+  if(type==='daily'&&rec){
+    const mg=rec.revenue>0?Math.round(rec.profit/rec.revenue*100):0;
+    const ep=rec.revenue>0?Math.round(rec.expenses/rec.revenue*100):0;
+    const validatorNotes=warnings.length>0?'VALIDATOR WARNINGS: '+warnings.join(' | '):'No validator warnings.';
+    prompt=`You are a business analyst AI for VENKATA RAMANA CLOTH STORES, a cloth shop in Chintalapudi, Andhra Pradesh, India.
+
+TODAY: Date=${rec.date}, UPI=Rs${rec.upi}, Cash=Rs${rec.cash}, Revenue=Rs${rec.revenue}, Expenses=Rs${rec.expenses}, Profit=Rs${rec.profit}, Margin=${mg}%, ExpensePct=${ep}%, KhataGiven=Rs${rec.khataGiven||0}
+ExpenseBreakdown: ${JSON.stringify(rec.expBreakdown||[])}
+TREND CONTEXT: ${trendHTML.replace(/<[^>]+>/g,'')}
+${validatorNotes}
+
+BENCHMARKS: Normal day = Rs2500-6000 revenue, Rs1200-2800 profit. Festival = Rs12000-45000. Cloth margin should be 25-40%. Expenses should be below 40% of revenue.
+
+Give exactly:
+1. VERDICT: [one sentence performance verdict]
+2. TOP INSIGHT: [most important thing this data reveals]
+3. ACTION TOMORROW: [one specific thing to do tomorrow]
+4. WATCH OUT: [one risk or warning]
+5. NEXT TARGET: [specific revenue target for tomorrow with reason]
+
+Max 150 words. Direct. No fluff. Context: village cloth shop, India.`;
+  } else {
+    const tR=last7.reduce((a,r)=>a+r.revenue,0),tP=last7.reduce((a,r)=>a+r.profit,0),tE=last7.reduce((a,r)=>a+r.expenses,0);
+    const best=last7.reduce((a,r)=>r.profit>a.profit?r:a);
+    const worst=last7.reduce((a,r)=>r.profit<a.profit?r:a);
+    const validatorNotes=warnings.length>0?'VALIDATOR WARNINGS: '+warnings.join(' | '):'No validator warnings.';
+    prompt=`Business analyst AI for VENKATA RAMANA CLOTH STORES, Chintalapudi, Andhra Pradesh.
+
+WEEK (${last7.length} days): TotalRevenue=Rs${tR}, TotalProfit=Rs${tP}, TotalExpenses=Rs${tE}, AvgDailyRev=Rs${Math.round(tR/last7.length)}, ProfitableDays=${last7.filter(r=>r.profit>0).length}/${last7.length}, BestDay=${best.date}(Rs${best.profit}), WorstDay=${worst.date}(Rs${worst.profit})
+DailyData: ${JSON.stringify(last7.map(r=>({d:r.date,rev:r.revenue,p:r.profit})))}
+TREND: ${trendHTML.replace(/<[^>]+>/g,'')}
+${validatorNotes}
+
+BENCHMARKS: Good week = Rs15000-35000 total revenue, Rs7000-15000 profit.
+
+Give exactly:
+1. WEEK VERDICT: [one sentence]
+2. TREND: [improving/declining/stable + evidence]
+3. WHAT WORKED: [lesson from the best day]
+4. PROBLEM: [what pattern is hurting profits]
+5. NEXT WEEK TARGET: [specific Rs revenue and profit targets]
+6. ONE BIG MOVE: [single most impactful change]
+
+Max 200 words. Direct. Actionable. Context: village cloth shop, India.`;
+  }
+
+  try{
+    const res=await fetchWithRetry('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:400,messages:[{role:'user',content:prompt}]})});
+    if(!res.ok){
+      const e=await res.json().catch(()=>({}));
+      const msg=e.error?.message||'';
+      // Friendly errors — never show raw API text to shop owner
+      const friendly=res.status===401?'API key is invalid or expired. Please update it in ⚙️ Settings.':
+                      res.status===429?'Too many requests right now. Please wait a few minutes and try again.':
+                      res.status===500?'The AI service is temporarily unavailable. Try again in a few minutes.':
+                      'AI analysis unavailable right now. Your rule-based stats above are still valid.';
+      throw new Error(friendly);
+    }
+    const data=await res.json();
+    const txt=data.content?.[0]?.text||'No response.';
+    const fmt=txt.split('\n').filter(l=>l.trim()).map(l=>{const m=l.match(/^(\d)\.\s*([\w\s]+):\s*(.*)/);return m?`<div style="margin-bottom:10px"><b style="color:var(--purple)">${esc(m[2])}:</b> ${esc(m[3])}</div>`:`<p style="color:var(--text);margin-bottom:6px;font-size:13px">${esc(l)}</p>`;}).join('');
+    setPipeStep('p4','done','✅ Done','AI analysis complete — see full output below.');
+    out.innerHTML=`<div class="ai-box" style="margin-top:12px"><div class="ai-hd">🤖 ${type==='daily'?'Daily':'Weekly'} AI Analysis · ${new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</div><div class="ai-body">${fmt}</div></div><div class="al info" style="display:block;margin-top:8px;font-size:12px">💡 This is AI guidance only — not certified financial advice. Always verify with your own records.</div>`;
+    if(type==='daily'&&rec)bWA(rec,txt.split('\n').find(l=>l.length>20)||'');
+  }catch(e){
+    setPipeStep('p4','fail','❌ Error',esc(e.message));
+    out.innerHTML=`<div class="al warn" style="display:block;margin-top:10px">⚠️ ${esc(e.message)}<br><small style="color:var(--dim)">Tip: Agents 1–3 analysis above is still available and doesn't need an internet connection.</small></div>`;
+  }
+}
+
+const delay=ms=>new Promise(r=>setTimeout(r,ms));
+
+// Retry on network errors (not on API auth/rate errors)
+async function fetchWithRetry(url,options,maxTries=2){
+  let lastErr;
+  for(let i=0;i<maxTries;i++){
+    try{
+      return await fetch(url,options);
+    }catch(e){
+      lastErr=e;
+      if(i<maxTries-1){
+        setPipeStep('p4','running',`Retry ${i+1}…`,`<div class="ld"><div class="sp2"></div><span>Network issue detected — retrying in 2 seconds…</span></div>`);
+        await delay(2000);
+      }
+    }
+  }
+  throw new Error('Network unavailable. Check your internet connection and try again.');
+}
+
+// Keep runAI for backward compatibility (calls pipeline)
+async function runAI(type){runAgentPipeline(type);}
+function animPipe(){/* replaced by real pipeline — no-op */}
+
+function bTrend(){
+  const el=document.getElementById('trendOut');
+  const recs=S.allR.slice(-14);
+  if(recs.length<2){el.innerHTML='<div class="empty"><div class="empty-i">📈</div><p>Save 2+ days to see trend insights.</p></div>';return;}
+  const avgR=Math.round(recs.reduce((a,r)=>a+r.revenue,0)/recs.length);
+  const avgP=Math.round(recs.reduce((a,r)=>a+r.profit,0)/recs.length);
+  const avgMg=Math.round(recs.reduce((a,r)=>a+(r.revenue>0?r.profit/r.revenue*100:0),0)/recs.length);
+  const upiR=Math.round(recs.reduce((a,r)=>a+(r.revenue>0?r.upi/r.revenue:0),0)/recs.length*100);
+  const half=Math.floor(recs.length/2);
+  const f1=recs.slice(0,half).reduce((a,r)=>a+r.profit,0)/half;
+  const f2=recs.slice(half).reduce((a,r)=>a+r.profit,0)/(recs.length-half);
+  const trend=f2>f1*1.05?'📈 Improving':f2<f1*0.95?'📉 Declining':'➡️ Stable';
+  const loss=recs.filter(r=>r.profit<0).length;
+  el.innerHTML=`
+    <div class="sl2">Trend Analysis — Last ${recs.length} Days</div>
+    <div class="ig">
+      <div class="ic"><div class="ich">Avg Revenue/Day</div><div class="icv">${Rs(avgR)}</div><div class="ics">${avgR>=3000?'✅ On target':'⚠️ Below Rs 3,000'}</div></div>
+      <div class="ic"><div class="ich">Avg Profit/Day</div><div class="icv" style="color:${avgP>=0?'var(--g2)':'var(--red)'}">${Rs(avgP)}</div><div class="ics">Margin: ${avgMg}%</div></div>
+      <div class="ic"><div class="ich">Profit Trend</div><div class="icv" style="font-size:13px">${trend}</div><div class="ics">${recs.filter(r=>r.profit>0).length}/${recs.length} profitable days</div></div>
+      <div class="ic"><div class="ich">UPI Ratio</div><div class="icv">${upiR}%</div><div class="ics">${100-upiR}% cash</div></div>
+    </div>
+    ${loss>0?`<div class="al err" style="display:block;margin-top:10px">⚠️ ${loss} loss day${loss>1?'s':''} in last ${recs.length} days</div>`:''}
+    ${avgMg<20?`<div class="al warn" style="display:block;margin-top:6px">📉 Avg margin ${avgMg}% below 25% target</div>`:''}`;
+}
+
+function bWeek(){
+  const recs=S.allR.slice(-7);if(!recs.length)return;
+  const labels=recs.map(r=>r.date.slice(5));
+  const profits=recs.map(r=>r.profit);
+  const colors=profits.map(p=>p>=0?'#2d6a4f':'#c0392b');
+  if(wkC){wkC.destroy();wkC=null;}
+  const ctx=document.getElementById('wkChart').getContext('2d');
+  wkC=new Chart(ctx,{type:'bar',data:{labels,datasets:[{label:'Profit',data:profits,backgroundColor:colors,borderRadius:5}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'Rs '+c.raw.toLocaleString('en-IN')}}},scales:{y:{ticks:{callback:v=>'Rs '+Number(v).toLocaleString('en-IN')},grid:{color:'rgba(0,0,0,.05)'}},x:{grid:{display:false}}}}});
+  if(recs.length<2){document.getElementById('wkStats').innerHTML='<div class="empty"><div class="empty-i">📅</div><p>Save 2+ days for stats.</p></div>';return;}
+  const tR=recs.reduce((a,r)=>a+r.revenue,0),tP=recs.reduce((a,r)=>a+r.profit,0);
+  const best=recs.reduce((a,r)=>r.profit>a.profit?r:a);
+  const worst=recs.reduce((a,r)=>r.profit<a.profit?r:a);
+  document.getElementById('wkStats').innerHTML=`
+    <div class="ch">📊 Week Summary</div>
+    <div class="g3" style="margin-bottom:12px">
+      <div class="sb ${tP>=0?'sg':'sr'}"><div class="sl">Week Profit</div><div class="sv" style="font-size:16px">${Rs(tP)}</div></div>
+      <div class="sb sy"><div class="sl">Avg/Day</div><div class="sv" style="font-size:16px">${Rs(Math.round(tP/recs.length))}</div></div>
+      <div class="sb sb2"><div class="sl">Revenue</div><div class="sv" style="font-size:16px">${Rs(tR)}</div></div>
+    </div>
+    <div style="font-size:13px">
+      <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border2)"><span style="color:var(--muted)">🏆 Best Day</span><b>${best.date} — <span style="color:var(--g2)">${Rs(best.profit)}</span></b></div>
+      <div style="display:flex;justify-content:space-between;padding:7px 0"><span style="color:var(--muted)">📉 Worst Day</span><b>${worst.date} — <span style="color:var(--red)">${Rs(worst.profit)}</span></b></div>
+    </div>
+    ${tP<0?'<div class="al err" style="display:block;margin-top:8px">⚠️ Net loss this week. Review expenses urgently.</div>':''}`;
+}
+
+function sim(mode){
+  const pr=PROFILE[mode];
+  const days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  let html=`<div class="sl2">Simulated ${mode==='festival'?'🎉 Festival':'📅 Normal'} Week</div>`;
+  let wTotal=0;
+  const simProfits=days.map((_,i)=>{const rev=Math.round((pr.min+Math.random()*(pr.max-pr.min))*pr.dayMult[i]);return rev*(1-pr.expPct*(0.9+Math.random()*.2));});
+  const maxP=Math.max(...simProfits.map(p=>Math.max(p,0)));
+  days.forEach((d,i)=>{
+    const rev=Math.round((pr.min+Math.random()*(pr.max-pr.min))*pr.dayMult[i]);
+    const exp=Math.round(rev*pr.expPct*(0.9+Math.random()*.2));
+    const p=rev-exp;wTotal+=p;
+    const bw=Math.round(Math.max(p,0)/Math.max(maxP,1)*100);
+    html+=`<div class="sd"><span class="sdn">${d}</span><div class="sdb"><div class="sdi" style="width:${bw}%"></div></div><span style="font-size:11px;color:var(--dim);width:60px;text-align:right;margin-right:6px">${Rs(rev)}</span><span class="sdp ${p>=0?'pos':'neg'}">${Rs(p)}</span></div>`;
+  });
+  html+=`<div style="display:flex;justify-content:space-between;padding:10px 12px;background:var(--g2);border-radius:7px;color:#fff;font-weight:800;margin-top:6px;font-size:14px"><span>Week Total</span><span>${Rs(wTotal)}</span></div>`;
+  document.getElementById('simOut').innerHTML=html;
+}
+
+function bKhata(){
+  const el=document.getElementById('khBook');
+  const act=S.allK.filter(k=>!k.paid);
+  const tot=act.reduce((a,k)=>a+k.amount,0);
+  if(!S.allK.length){el.innerHTML='<div class="empty"><div class="empty-i">🙏</div><p>No khata entries yet.</p></div>';document.getElementById('khTotRow').style.display='none';return;}
+  el.innerHTML=S.allK.map((k,i)=>`<div class="ki ${k.paid?'kpaid':''}"><div><div class="kn">${esc(k.name)}</div><div class="kd">${esc(k.date)}</div></div><div style="display:flex;align-items:center;gap:8px"><span class="ka">${Rs(k.amount)}</span>${!k.paid?`<button class="btn bg bsm" onclick="payKh(${i})">✅ Paid</button>`:`<span class="tag tg2">Paid</span>`}</div></div>`).join('');
+  document.getElementById('khTotRow').style.display='block';
+  document.getElementById('khTot').textContent=Rs(tot);
+}
+function payKh(i){if(i<0||i>=S.allK.length)return;if(!confirm('Mark as paid: '+S.allK[i].name+'?'))return;S.allK[i].paid=true;sv();bKhata();}
+
+function bWA(rec,aiNote){
+  if(!rec)rec=S.allR.find(r=>r.date===td());if(!rec)return;
+  const mg=rec.revenue>0?Math.round(rec.profit/rec.revenue*100):0;
+  let msg=`🧵 VENKATA RAMANA CLOTH STORES\n📍 Chintalapudi, Andhra Pradesh\n📅 ${rec.date}\n${'═'.repeat(28)}\n📱 UPI Received : ${Rs(rec.upi)}\n💵 Cash Received: ${Rs(rec.cash)}\n💸 Expenses     : ${Rs(rec.expenses)}\n${'═'.repeat(28)}\n${rec.profit>=0?'✅':'❌'} NET ${rec.profit>=0?'PROFIT':'LOSS'}: ${Rs(Math.abs(rec.profit))}\n📊 Margin       : ${mg}%`;
+  if(rec.khataGiven>0)msg+=`\n📒 Khata Given  : ${Rs(rec.khataGiven)}`;
+  if(aiNote)msg+=`\n\n💡 ${aiNote.replace(/^\d\.\s*/,'').substring(0,100)}`;
+  msg+='\n\n_Via VRC AI Profit Agent_';
+  document.getElementById('waMsg').textContent=msg;
+}
+function copyWA(){
+  const txt=document.getElementById('waMsg').textContent;
+  const al=document.getElementById('waAl');
+  if(txt.startsWith('Save')){sAl(al,'warn','Save entry first.');return;}
+  const fn=()=>{sAl(al,'ok','✅ Copied! Opening WhatsApp...');setTimeout(()=>{window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');},300);};
+  if(navigator.clipboard)navigator.clipboard.writeText(txt).then(fn).catch(()=>fb(txt,al));
+  else fb(txt,al);
+}
+function fb(txt,al){const ta=document.createElement('textarea');ta.value=txt;ta.style.cssText='position:fixed;opacity:0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy');sAl(al,'ok','✅ Copied!');}catch{sAl(al,'err','Copy manually.');}document.body.removeChild(ta);}
+
+async function saveKey(){
+  const k=document.getElementById('apiK').value.trim();
+  const al=document.getElementById('keyAl');
+  if(!k){sAl(al,'warn','Enter a key.');return;}
+  if(!k.startsWith('sk-ant-')){sAl(al,'err','❌ Must start with sk-ant-');return;}
+  if(!sessionKey){sAl(al,'err','❌ Session key missing. Please log out and back in.');return;}
+  try{
+    const enc=await encryptStr(k,sessionKey);
+    localStorage.setItem(SEC_SK,JSON.stringify(enc));
+    S.apiKey=k;
+    updAgentStat();
+    sAl(al,'ok','✅ API key saved & encrypted! AI Agent is now active.');
+    document.getElementById('apiK').value='sk-ant-••••••••';
+  }catch(err){sAl(al,'err','Encryption failed: '+err.message);}
+}
+
+async function changePassword(){
+  const old=document.getElementById('cpOld').value;
+  const n1=document.getElementById('cpNew1').value;
+  const n2=document.getElementById('cpNew2').value;
+  const al=document.getElementById('cpAl');
+  if(!old||!n1||!n2){sAl(al,'warn','Fill in all three fields.');return;}
+  if(n1.length<6){sAl(al,'warn','New password must be at least 6 characters.');return;}
+  if(n1!==n2){sAl(al,'warn','New passwords do not match.');return;}
+  const setup=getSetup();
+  if(!setup){sAl(al,'err','Setup data missing. Cannot change password.');return;}
+  try{
+    // Verify old password
+    const oldHash=await sha256hex(old);
+    if(oldHash!==setup.pwdHash){sAl(al,'err','❌ Current password is incorrect.');return;}
+    // Generate fresh salt for new password
+    const newSalt=crypto.getRandomValues(new Uint8Array(16));
+    const newSaltB64=b64e(newSalt);
+    const newHash=await sha256hex(n1);
+    const newKey=await deriveAESKey(n1,newSalt);
+    // Re-encrypt API key with new key if one exists
+    if(S.apiKey&&S.apiKey.startsWith('sk-ant-')){
+      const enc=await encryptStr(S.apiKey,newKey);
+      localStorage.setItem(SEC_SK,JSON.stringify(enc));
+    }
+    // Update setup with new hash + salt
+    saveSetup({...setup,pwdHash:newHash,salt:newSaltB64,passwordChangedAt:new Date().toISOString()});
+    // Update session key in memory
+    sessionKey=newKey;
+    // Clear inputs
+    document.getElementById('cpOld').value='';
+    document.getElementById('cpNew1').value='';
+    document.getElementById('cpNew2').value='';
+    sAl(al,'ok','✅ Password changed! API key re-encrypted with your new password.');
+  }catch(err){sAl(al,'err','Error: '+err.message);}
+}
+
+async function loadDecryptedKey(){
+  if(!sessionKey)return;
+  try{
+    const raw=localStorage.getItem(SEC_SK);
+    if(!raw){S.apiKey='';return;}
+    const enc=JSON.parse(raw);
+    const key=await decryptStr(enc,sessionKey);
+    S.apiKey=key||'';
+  }catch{S.apiKey='';}
+}
+
+function togFest(){
+  S.fest=document.getElementById('fTog').checked;
+  document.getElementById('festP').style.display=S.fest?'block':'none';
+  document.getElementById('festCard').style.display=S.fest?'block':'none';
+  sv();
+}
+function updP(rev){if(!S.fest)return;const t=5000,pct=Math.min(100,Math.round(rev/t*100));document.getElementById('prgBar').style.width=pct+'%';document.getElementById('prgPct').textContent=pct+'%';}
+function updAgentStat(){const on=S.apiKey&&S.apiKey.startsWith('sk-ant-');document.getElementById('aDot').className='a-dot'+(on?'':' off');document.getElementById('aStat').textContent=on?'AI Agent: Active — Claude AI ready for smart summaries':'AI Agent: Offline — Add Anthropic API key in Settings';}
+
+function exportCSV(){
+  if(!S.allR.length){alert('No records yet.');return;}
+  const h='Date,UPI (Rs),Cash (Rs),Revenue (Rs),Expenses (Rs),Net Profit (Rs),Margin (%),Khata (Rs)';
+  const rows=S.allR.map(r=>[r.date,r.upi,r.cash,r.revenue,r.expenses,r.profit,r.revenue>0?Math.round(r.profit/r.revenue*100):0,r.khataGiven||0].join(','));
+  const blob=new Blob([[h,...rows].join('\n')],{type:'text/csv'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='vrc-stores-'+td()+'.csv';a.click();URL.revokeObjectURL(a.href);
+}
+
+function exportJSON(){
+  if(!S.allR.length&&!S.allK.length){alert('No data to backup yet.');return;}
+  const setup=getSetup();
+  // Note: apiKey is deliberately excluded from backup (it's encrypted in the browser only)
+  const backup={
+    version:4,
+    exportDate:new Date().toISOString(),
+    shopName:setup?setup.shopName:'Venkata Ramana Cloth Stores',
+    ownerName:setup?setup.ownerName:'',
+    allR:S.allR,
+    allK:S.allK,
+    tgt:S.tgt,
+    note:'API key is NOT included in this backup for security. Re-enter it in Settings after restoring.'
+  };
+  const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='vrc-backup-'+td()+'.json';a.click();URL.revokeObjectURL(a.href);
+  sAl(document.getElementById('backupAl'),'ok','✅ Backup downloaded! Save to Google Drive or WhatsApp to yourself. Note: API key is not included (security).');
+}
+
+function importJSON(input){
+  const al=document.getElementById('backupAl');
+  const file=input.files[0];
+  if(!file){return;}
+  if(!file.name.endsWith('.json')){sAl(al,'err','❌ Please select a .json backup file (not CSV).');return;}
+  const reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      const data=JSON.parse(e.target.result);
+      if(!Array.isArray(data.allR)){sAl(al,'err','❌ Invalid backup file. allR records missing.');return;}
+      const confirmed=confirm(
+        'Restore backup from '+data.exportDate?.slice(0,10)+'?\n\n'+
+        '• '+data.allR.length+' day records\n'+
+        '• '+(data.allK||[]).length+' khata entries\n\n'+
+        '⚠️ This will MERGE with your current data.\nExisting records for the same dates will be overwritten.'
+      );
+      if(!confirmed){input.value='';return;}
+      // Merge: newer record for same date wins (backup wins over existing)
+      const dateMap={};
+      S.allR.forEach(r=>{dateMap[r.date]=r;});
+      data.allR.forEach(r=>{dateMap[r.date]=r;});
+      S.allR=Object.values(dateMap).sort((a,b)=>a.date.localeCompare(b.date));
+      // Merge khata (add entries that don't already exist by name+date+amount)
+      const khKey=k=>k.name+'|'+k.date+'|'+k.amount;
+      const existingKeys=new Set(S.allK.map(khKey));
+      (data.allK||[]).forEach(k=>{if(!existingKeys.has(khKey(k)))S.allK.push(k);});
+      if(typeof data.tgt==='number')S.tgt=data.tgt;
+      sv();
+      sAl(al,'ok','✅ Backup restored! '+S.allR.length+' day records, '+S.allK.length+' khata entries loaded.');
+      bWeek();bTrend();bKhata();
+    }catch(err){sAl(al,'err','❌ Could not read backup file: '+err.message);}
+    input.value='';
+  };
+  reader.readAsText(file);
+}
+function clearAll(){if(!confirm('⚠️ Delete ALL data?'))return;if(!confirm('Really sure?'))return;S.allR=[];S.allK=[];sv();alert('Cleared.');}
+
+function loadDemo(){
+  if(!confirm('Load demo data? Clears today unsaved entries.'))return;
+  resetT();
+  S.upi=[{text:'Received Rs 850 from Lakshmi via PhonePe',amount:850},{text:'UPI/CR/1200/GooglePay',amount:1200},{text:'panch sau rupaye prapt hue',amount:500},{text:'Rs 750 credited — Paytm',amount:750},{text:'650 aaya Google Pay se',amount:650}];
+  document.getElementById('cashIn').value='1100';
+  S.exp=[{cat:'Wholesale Fabric',desc:'Banarasi sarees stock',amount:1800},{cat:'Staff Wages',desc:'',amount:400},{cat:'Electricity',desc:'',amount:150},{cat:'Tailor Charges',desc:'Alterations',amount:200}];
+  rUPI();rExp();sAl(document.getElementById('saveAl'),'info','🎭 Realistic demo loaded (Chintalapudi cloth shop). Press Save to see analysis.');
+}
+function resetT(){S.upi=[];S.exp=[];S.khT=[];const c=document.getElementById('cashIn');if(c)c.value='';rUPI();rExp();}
+
+function go(name){
+  document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));
+  document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));
+  document.getElementById('pg-'+name).classList.add('on');
+  document.getElementById('nb-'+name).classList.add('on');
+  if(name==='today'){const r=S.allR.find(r=>r.date===td());bToday(r||null);}
+  if(name==='week'){bWeek();sim('normal');}
+  if(name==='khata')bKhata();
+  if(name==='agent'){bTrend();resetPipe();renderQuotaBadge();}
+  if(name==='settings'){
+    document.getElementById('fTog').checked=S.fest;
+    document.getElementById('dTgt').value=S.tgt;
+    const r=S.allR.find(r=>r.date===td());
+    if(r)bWA(r);
+    if(S.apiKey&&S.apiKey.startsWith('sk-ant-'))document.getElementById('apiK').value='sk-ant-••••••••';
+    // Populate About card
+    const setup=getSetup();
+    const q=getQuota();
+    const about=document.getElementById('aboutInfo');
+    if(about&&setup){
+      about.innerHTML=
+        `<b>Shop:</b> ${esc(setup.shopName)}<br>`+
+        `<b>Owner:</b> ${esc(setup.ownerName||'—')}<br>`+
+        `<b>Setup date:</b> ${setup.createdAt?setup.createdAt.slice(0,10):'—'}<br>`+
+        `<b>Total records:</b> ${S.allR.length} days saved<br>`+
+        `<b>Khata entries:</b> ${S.allK.length}<br>`+
+        `<b>AI calls today:</b> ${q.used} / ${q.max}<br>`+
+        `<b>App version:</b> VRC AI Profit Agent v4<br>`+
+        `<b>Data location:</b> This device only (browser localStorage)<br>`+
+        `<span style="color:var(--red);font-size:11px">⚠️ Clear browser data = all records deleted. Keep backups!</span>`;
+    }
+  }
+}
+
+function init(){
+  const now=new Date();
+  // Use saved shop name from setup if available
+  const setup=getSetup();
+  const location=setup?setup.shopName:'Chintalapudi';
+  document.getElementById('hdrDate').textContent=location+' · '+now.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  document.getElementById('fTog').checked=S.fest;
+  document.getElementById('dTgt').value=S.tgt;
+  if(S.fest){document.getElementById('festP').style.display='block';document.getElementById('festCard').style.display='block';}
+  updAgentStat();rUPI();rExp();
+  const r=S.allR.find(r=>r.date===td());if(r)bToday(r);
+}
+
+document.addEventListener('DOMContentLoaded',()=>{checkFirstRun();});
+</script>
+</body>
+</html>

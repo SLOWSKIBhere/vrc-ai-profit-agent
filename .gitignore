@@ -1,0 +1,25 @@
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Node (if you ever add tooling)
+node_modules/
+npm-debug.log*
+
+# Local backups (user data exports — never commit these)
+vrc-backup-*.json
+vrc-stores-*.csv
+
+# Environment files
+.env
+.env.local
