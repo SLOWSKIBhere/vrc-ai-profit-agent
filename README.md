@@ -1,6 +1,6 @@
 # VRC AI Profit Agent
 
-**A real agentic AI system built for a real person solving a real problem.**
+**A low level agentic AI system built for a real person solving a real problem.**
 
 A browser-based 4-agent AI pipeline that helps small shop owners in India track daily UPI and cash income, manage expenses and credit, and receive Claude-powered business intelligence — all without a backend, server, or installation.
 
