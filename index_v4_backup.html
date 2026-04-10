@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>VRC Stores — AI Profit Agent v5</title>
+<title>VRC Stores — AI Profit Agent v4</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <style>
 :root{
@@ -533,7 +533,6 @@ const SK='vrc_v2';            // main data (records, khata, prefs)
 const SETUP_SK='vrc_setup';   // first-run setup (shop name, pwd hash, salt)
 const SEC_SK='vrc_sec';       // encrypted API key (AES-GCM blob)
 const QUOTA_SK='vrc_quota';   // daily AI call counter
-const AI_CACHE_SK='vrc_ai_cache'; // same-day AI response cache
 
 let sessionKey=null;  // CryptoKey in memory only — cleared on logout
 // NOTE: PASS constant removed in v4. Password is SHA-256 hashed and
@@ -546,21 +545,7 @@ let S={upi:[],exp:[],khT:[],allR:[],allK:[],fest:false,tgt:3000,apiKey:''};
 let wkC=null;
 
 // sv/ld: apiKey is NO LONGER saved here — it lives encrypted in SEC_SK
-function sv(){
-  try{
-    localStorage.setItem(SK,JSON.stringify({allR:S.allR,allK:S.allK,fest:S.fest,tgt:S.tgt}));
-    // Warn if approaching 5MB browser localStorage limit
-    let total=0;
-    for(const k in localStorage){if(localStorage.hasOwnProperty(k))total+=localStorage[k].length;}
-    if(total>4000000){// ~4MB
-      const al=document.getElementById('backupAl');
-      if(al)sAl(al,'warn','⚠️ Storage nearly full ('+Math.round(total/1000)+'KB / ~5MB limit). Download a backup now to avoid data loss.');
-    }
-  }catch(e){
-    const al=document.getElementById('backupAl');
-    if(al)sAl(al,'err','❌ Storage full! Download a backup immediately — new entries cannot be saved.');
-  }
-}
+function sv(){try{localStorage.setItem(SK,JSON.stringify({allR:S.allR,allK:S.allK,fest:S.fest,tgt:S.tgt}));}catch(e){}}
 function ld(){try{const d=JSON.parse(localStorage.getItem(SK)||'{}');if(Array.isArray(d.allR))S.allR=d.allR;if(Array.isArray(d.allK))S.allK=d.allK;if(typeof d.fest==='boolean')S.fest=d.fest;if(typeof d.tgt==='number')S.tgt=d.tgt;}catch(e){}}
 function san(el){el.value=el.value.replace(/<[^>]*>/g,'').replace(/[<>"'`\\]/g,'');}
 function vN(el){let v=parseFloat(el.value);if(isNaN(v)||v<0)el.value='';if(v>999999)el.value=999999;}
@@ -573,41 +558,16 @@ async function doLogin(){
   const p=document.getElementById('pw').value;
   const e=document.getElementById('lErr');
   if(!p){e.textContent='Enter password.';return;}
-  // Brute force protection — max 5 attempts, 15min lockout
-  const lockKey='vrc_lock';
-  try{
-    const lock=JSON.parse(localStorage.getItem(lockKey)||'{}');
-    if(lock.until&&Date.now()<lock.until){
-      const mins=Math.ceil((lock.until-Date.now())/60000);
-      e.textContent=`Too many attempts. Try again in ${mins} minute${mins>1?'s':''}.`;
-      document.getElementById('pw').value='';
-      return;
-    }
-  }catch{/* no lock */}
   const setup=getSetup();
   if(!setup){e.textContent='Setup not complete. Please refresh.';return;}
   try{
     const enteredHash=await sha256hex(p);
     if(enteredHash!==setup.pwdHash){
-      // Track failed attempts
-      const lockKey='vrc_lock';
-      const lock=JSON.parse(localStorage.getItem(lockKey)||'{"attempts":0}');
-      lock.attempts=(lock.attempts||0)+1;
-      if(lock.attempts>=5){
-        lock.until=Date.now()+15*60*1000; // 15min lockout
-        lock.attempts=0;
-        localStorage.setItem(lockKey,JSON.stringify(lock));
-        e.textContent='Too many failed attempts. Locked for 15 minutes.';
-      } else {
-        localStorage.setItem(lockKey,JSON.stringify(lock));
-        e.textContent=`❌ Wrong password. ${5-lock.attempts} attempt${5-lock.attempts!==1?'s':''} remaining.`;
-      }
+      e.textContent='❌ Wrong password.';
       document.getElementById('pw').value='';
       document.getElementById('pw').focus();
       return;
     }
-    // Successful login — clear lockout
-    localStorage.removeItem('vrc_lock');
     // Correct password — derive session encryption key
     const salt=b64d(setup.salt);
     sessionKey=await deriveAESKey(p,salt);
@@ -717,7 +677,7 @@ function saveDay(){
   const expT=S.exp.reduce((a,e)=>a+e.amount,0);
   const khG=S.khT.reduce((a,e)=>a+e.amount,0);
   const rev=upiT+cash, profit=rev-expT;
-  if(rev===0&&expT===0){sAl(al,'warn','⚠️ Add at least one UPI, cash, or expense entry before saving.');return;}
+  if(rev===0&&expT===0){sAl(al,'warn','⚠️ Add entries first.');return;}
   const rec={date:td(),upi:upiT,cash,revenue:rev,expenses:expT,profit,khataGiven:khG,expBreakdown:[...S.exp],timestamp:Date.now()};
   S.allR=S.allR.filter(r=>r.date!==td());S.allR.push(rec);sv();
   sAl(al,'ok','✅ Saved! '+(profit>=0?'Profit':'Loss')+': '+Rs(Math.abs(profit)));
@@ -1136,18 +1096,6 @@ async function runAgentPipeline(type){
     document.getElementById('aiOut').innerHTML=`<div class="al warn" style="display:block;margin-top:10px">⚠️ Daily AI limit reached (${quota.max} calls). Come back tomorrow, or the rule-based insights from Agents 1–3 above are already useful!</div>`;
     return;
   }
-
-  // ── PHASE 3: Same-day response cache ──
-  const cacheKey=`${type}_${td()}`;
-  try{
-    const cached=JSON.parse(localStorage.getItem(AI_CACHE_SK)||'{}');
-    if(cached.key===cacheKey&&cached.html){
-      setPipeStep('p4','done','✅ Cached','Using today\'s saved AI analysis — no extra API call needed.');
-      document.getElementById('aiOut').innerHTML=cached.html+`<div class="al info" style="display:block;margin-top:8px;font-size:12px">♻️ Today's saved analysis. Run again tomorrow for fresh advice. | 💡 AI guidance only — not certified financial advice.</div>`;
-      return;
-    }
-  }catch{/* cache miss — continue to API */}
-
   bumpQuota(); // Count this call
 
   let prompt='';
@@ -1213,10 +1161,7 @@ Max 200 words. Direct. Actionable. Context: village cloth shop, India.`;
     const txt=data.content?.[0]?.text||'No response.';
     const fmt=txt.split('\n').filter(l=>l.trim()).map(l=>{const m=l.match(/^(\d)\.\s*([\w\s]+):\s*(.*)/);return m?`<div style="margin-bottom:10px"><b style="color:var(--purple)">${esc(m[2])}:</b> ${esc(m[3])}</div>`:`<p style="color:var(--text);margin-bottom:6px;font-size:13px">${esc(l)}</p>`;}).join('');
     setPipeStep('p4','done','✅ Done','AI analysis complete — see full output below.');
-    const aiHTML=`<div class="ai-box" style="margin-top:12px"><div class="ai-hd">🤖 ${type==='daily'?'Daily':'Weekly'} AI Analysis · ${new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</div><div class="ai-body">${fmt}</div></div><div class="al info" style="display:block;margin-top:8px;font-size:12px">💡 This is AI guidance only — not certified financial advice. Always verify with your own records.</div>`;
-    out.innerHTML=aiHTML;
-    // Cache for same-day re-runs
-    try{localStorage.setItem(AI_CACHE_SK,JSON.stringify({key:cacheKey,html:aiHTML}));}catch{/* storage full — skip cache */}
+    out.innerHTML=`<div class="ai-box" style="margin-top:12px"><div class="ai-hd">🤖 ${type==='daily'?'Daily':'Weekly'} AI Analysis · ${new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</div><div class="ai-body">${fmt}</div></div><div class="al info" style="display:block;margin-top:8px;font-size:12px">💡 This is AI guidance only — not certified financial advice. Always verify with your own records.</div>`;
     if(type==='daily'&&rec)bWA(rec,txt.split('\n').find(l=>l.length>20)||'');
   }catch(e){
     setPipeStep('p4','fail','❌ Error',esc(e.message));
@@ -1260,25 +1205,6 @@ function bTrend(){
   const f2=recs.slice(half).reduce((a,r)=>a+r.profit,0)/(recs.length-half);
   const trend=f2>f1*1.05?'📈 Improving':f2<f1*0.95?'📉 Declining':'➡️ Stable';
   const loss=recs.filter(r=>r.profit<0).length;
-  // Day-of-week pattern detection
-  const dayNames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  const dayBuckets={};
-  recs.forEach(r=>{
-    const d=new Date(r.date).getDay();
-    const name=dayNames[d];
-    if(!dayBuckets[name])dayBuckets[name]={total:0,count:0};
-    dayBuckets[name].total+=r.revenue;
-    dayBuckets[name].count++;
-  });
-  const dayAvgs=Object.entries(dayBuckets)
-    .filter(([,v])=>v.count>=2)
-    .map(([day,v])=>({day,avg:Math.round(v.total/v.count)}))
-    .sort((a,b)=>b.avg-a.avg);
-  const bestDay=dayAvgs[0];
-  const worstDay=dayAvgs[dayAvgs.length-1];
-  const dayInsight=dayAvgs.length>=2
-    ?`<div class="al info" style="display:block;margin-top:8px;font-size:12px">📅 Pattern detected: <b>${bestDay.day}</b> averages ${Rs(bestDay.avg)} revenue — your strongest day. <b>${worstDay.day}</b> averages ${Rs(worstDay.avg)} — your lightest.</div>`
-    :'';
   el.innerHTML=`
     <div class="sl2">Trend Analysis — Last ${recs.length} Days</div>
     <div class="ig">
@@ -1287,8 +1213,7 @@ function bTrend(){
       <div class="ic"><div class="ich">Profit Trend</div><div class="icv" style="font-size:13px">${trend}</div><div class="ics">${recs.filter(r=>r.profit>0).length}/${recs.length} profitable days</div></div>
       <div class="ic"><div class="ich">UPI Ratio</div><div class="icv">${upiR}%</div><div class="ics">${100-upiR}% cash</div></div>
     </div>
-    ${dayInsight}
-    ${loss>0?`<div class="al err" style="display:block;margin-top:8px">⚠️ ${loss} loss day${loss>1?'s':''} in last ${recs.length} days</div>`:''}
+    ${loss>0?`<div class="al err" style="display:block;margin-top:10px">⚠️ ${loss} loss day${loss>1?'s':''} in last ${recs.length} days</div>`:''}
     ${avgMg<20?`<div class="al warn" style="display:block;margin-top:6px">📉 Avg margin ${avgMg}% below 25% target</div>`:''}`;
 }
 
