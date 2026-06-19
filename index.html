@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' https://api.anthropic.com https://openrouter.ai; connect-src 'self' https://api.anthropic.com https://openrouter.ai; img-src 'self' data:;">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>VRC Stores — AI Profit Agent v5</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
@@ -463,10 +464,10 @@ input:checked+.slr::before{transform:translateX(20px)}
   <div class="pg" id="pg-settings">
     <div class="card">
       <div class="ch">🔑 AI Agent Configuration</div>
-      <div class="al info" style="display:block;margin-bottom:12px;font-size:12px">Get free API key at console.anthropic.com. Stored only on this device.</div>
+      <div class="al info" style="display:block;margin-bottom:12px;font-size:12px">Get free API key at openrouter.ai/keys. Stored only on this device.</div>
       <div class="al warn" style="display:block;margin-bottom:12px;font-size:12px">⚠️ Do not use this app on shared or public devices. Your API key and shop data are stored in this browser only.</div>
-      <label class="fl">Anthropic API Key (sk-ant-...)</label>
-      <input type="password" id="apiK" placeholder="sk-ant-..." oninput="san(this)">
+      <label class="fl">Anthropic API Key (sk-or-...)</label>
+      <input type="password" id="apiK" placeholder="sk-or-..." oninput="san(this)">
       <button class="btn bai" onclick="saveKey()">💾 Save API Key & Activate Agent</button>
       <div id="keyAl" class="al"></div>
     </div>
@@ -576,7 +577,7 @@ async function doLogin(){
   // Brute force protection — max 5 attempts, 15min lockout
   const lockKey='vrc_lock';
   try{
-    const lock=JSON.parse(localStorage.getItem(lockKey)||'{}');
+    const lock=JSON.parse(sessionStorage.getItem(lockKey)||'{}');
     if(lock.until&&Date.now()<lock.until){
       const mins=Math.ceil((lock.until-Date.now())/60000);
       e.textContent=`Too many attempts. Try again in ${mins} minute${mins>1?'s':''}.`;
@@ -591,15 +592,15 @@ async function doLogin(){
     if(enteredHash!==setup.pwdHash){
       // Track failed attempts
       const lockKey='vrc_lock';
-      const lock=JSON.parse(localStorage.getItem(lockKey)||'{"attempts":0}');
+      const lock=JSON.parse(sessionStorage.getItem(lockKey)||'{"attempts":0}');
       lock.attempts=(lock.attempts||0)+1;
       if(lock.attempts>=5){
         lock.until=Date.now()+15*60*1000; // 15min lockout
         lock.attempts=0;
-        localStorage.setItem(lockKey,JSON.stringify(lock));
+        sessionStorage.setItem(lockKey,JSON.stringify(lock));
         e.textContent='Too many failed attempts. Locked for 15 minutes.';
       } else {
-        localStorage.setItem(lockKey,JSON.stringify(lock));
+        sessionStorage.setItem(lockKey,JSON.stringify(lock));
         e.textContent=`❌ Wrong password. ${5-lock.attempts} attempt${5-lock.attempts!==1?'s':''} remaining.`;
       }
       document.getElementById('pw').value='';
@@ -607,7 +608,7 @@ async function doLogin(){
       return;
     }
     // Successful login — clear lockout
-    localStorage.removeItem('vrc_lock');
+    sessionStorage.removeItem('vrc_lock');
     // Correct password — derive session encryption key
     const salt=b64d(setup.salt);
     sessionKey=await deriveAESKey(p,salt);
@@ -761,7 +762,7 @@ async function sha256hex(str){
 async function deriveAESKey(password,salt){
   const raw=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),{name:'PBKDF2'},false,['deriveKey']);
   return crypto.subtle.deriveKey(
-    {name:'PBKDF2',salt,iterations:100000,hash:'SHA-256'},
+    {name:'PBKDF2',salt,iterations:250000,hash:'SHA-256'},
     raw,{name:'AES-GCM',length:256},false,['encrypt','decrypt']
   );
 }
@@ -1121,7 +1122,7 @@ async function runAgentPipeline(type){
 
   // ── AGENT 4: Claude AI Summary ───────────────────────
   await delay(500);
-  if(!key||!key.startsWith('sk-ant-')){
+  if(!key||!key.startsWith('sk-or-')){
     setPipeStep('p4','fail','No API Key','Add Anthropic API key in Settings → More to enable AI analysis.');
     out.innerHTML=`<div class="al warn" style="display:block;margin-top:10px">⚠️ Agents 1–3 completed. Add an Anthropic API key in <b>⚙️ More → Settings</b> to unlock Agent 4 (AI Summary).<br><br>The trend stats above are already useful insights!</div>`;
     return;
@@ -1143,7 +1144,15 @@ async function runAgentPipeline(type){
     const cached=JSON.parse(localStorage.getItem(AI_CACHE_SK)||'{}');
     if(cached.key===cacheKey&&cached.html){
       setPipeStep('p4','done','✅ Cached','Using today\'s saved AI analysis — no extra API call needed.');
-      document.getElementById('aiOut').innerHTML=cached.html+`<div class="al info" style="display:block;margin-top:8px;font-size:12px">♻️ Today's saved analysis. Run again tomorrow for fresh advice. | 💡 AI guidance only — not certified financial advice.</div>`;
+      // SECURITY: sanitize cached HTML before injection to prevent XSS
+// strip <script> blocks and on* event handlers from AI-cached output
+function sanitizeCachedHtml(raw){
+  return raw
+    .replace(/<script[\s\S]*?<\/script>/gi,'')
+    .replace(/\s+on\w+\s*=\s*["'][^"']*["']/gi,'')
+    .replace(/javascript:/gi,'');
+}
+document.getElementById('aiOut').innerHTML=sanitizeCachedHtml(cached.html)+`<div class="al info" style="display:block;margin-top:8px;font-size:12px">♻️ Today's saved analysis. Run again tomorrow for fresh advice. | 💡 AI guidance only — not certified financial advice.</div>`;
       return;
     }
   }catch{/* cache miss — continue to API */}
@@ -1198,7 +1207,7 @@ Max 200 words. Direct. Actionable. Context: village cloth shop, India.`;
   }
 
   try{
-    const res=await fetchWithRetry('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:400,messages:[{role:'user',content:prompt}]})});
+    const res=await fetchWithRetry('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key,'HTTP-Referer':'https://vrc-profit-agent.local','X-Title':'VRC AI Profit Agent'},body:JSON.stringify({model:'anthropic/claude-sonnet-4',max_tokens:400,messages:[{role:'user',content:prompt}]})});
     if(!res.ok){
       const e=await res.json().catch(()=>({}));
       const msg=e.error?.message||'';
@@ -1210,7 +1219,7 @@ Max 200 words. Direct. Actionable. Context: village cloth shop, India.`;
       throw new Error(friendly);
     }
     const data=await res.json();
-    const txt=data.content?.[0]?.text||'No response.';
+    const txt=data.choices?.[0]?.message?.content||data.content?.[0]?.text||'No response.';
     const fmt=txt.split('\n').filter(l=>l.trim()).map(l=>{const m=l.match(/^(\d)\.\s*([\w\s]+):\s*(.*)/);return m?`<div style="margin-bottom:10px"><b style="color:var(--purple)">${esc(m[2])}:</b> ${esc(m[3])}</div>`:`<p style="color:var(--text);margin-bottom:6px;font-size:13px">${esc(l)}</p>`;}).join('');
     setPipeStep('p4','done','✅ Done','AI analysis complete — see full output below.');
     const aiHTML=`<div class="ai-box" style="margin-top:12px"><div class="ai-hd">🤖 ${type==='daily'?'Daily':'Weekly'} AI Analysis · ${new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</div><div class="ai-body">${fmt}</div></div><div class="al info" style="display:block;margin-top:8px;font-size:12px">💡 This is AI guidance only — not certified financial advice. Always verify with your own records.</div>`;
@@ -1370,7 +1379,7 @@ async function saveKey(){
   const k=document.getElementById('apiK').value.trim();
   const al=document.getElementById('keyAl');
   if(!k){sAl(al,'warn','Enter a key.');return;}
-  if(!k.startsWith('sk-ant-')){sAl(al,'err','❌ Must start with sk-ant-');return;}
+  if(!k.startsWith('sk-or-')){sAl(al,'err','❌ Must start with sk-or-');return;}
   if(!sessionKey){sAl(al,'err','❌ Session key missing. Please log out and back in.');return;}
   try{
     const enc=await encryptStr(k,sessionKey);
@@ -1378,7 +1387,7 @@ async function saveKey(){
     S.apiKey=k;
     updAgentStat();
     sAl(al,'ok','✅ API key saved & encrypted! AI Agent is now active.');
-    document.getElementById('apiK').value='sk-ant-••••••••';
+    document.getElementById('apiK').value='sk-or-••••••••';
   }catch(err){sAl(al,'err','Encryption failed: '+err.message);}
 }
 
@@ -1402,7 +1411,7 @@ async function changePassword(){
     const newHash=await sha256hex(n1);
     const newKey=await deriveAESKey(n1,newSalt);
     // Re-encrypt API key with new key if one exists
-    if(S.apiKey&&S.apiKey.startsWith('sk-ant-')){
+    if(S.apiKey&&S.apiKey.startsWith('sk-or-')){
       const enc=await encryptStr(S.apiKey,newKey);
       localStorage.setItem(SEC_SK,JSON.stringify(enc));
     }
@@ -1436,7 +1445,7 @@ function togFest(){
   sv();
 }
 function updP(rev){if(!S.fest)return;const t=5000,pct=Math.min(100,Math.round(rev/t*100));document.getElementById('prgBar').style.width=pct+'%';document.getElementById('prgPct').textContent=pct+'%';}
-function updAgentStat(){const on=S.apiKey&&S.apiKey.startsWith('sk-ant-');document.getElementById('aDot').className='a-dot'+(on?'':' off');document.getElementById('aStat').textContent=on?'AI Agent: Active — Claude AI ready for smart summaries':'AI Agent: Offline — Add Anthropic API key in Settings';}
+function updAgentStat(){const on=S.apiKey&&S.apiKey.startsWith('sk-or-');document.getElementById('aDot').className='a-dot'+(on?'':' off');document.getElementById('aStat').textContent=on?'AI Agent: Active — Claude AI ready for smart summaries':'AI Agent: Offline — Add Anthropic API key in Settings';}
 
 function exportCSV(){
   if(!S.allR.length){alert('No records yet.');return;}
@@ -1527,7 +1536,7 @@ function go(name){
     document.getElementById('dTgt').value=S.tgt;
     const r=S.allR.find(r=>r.date===td());
     if(r)bWA(r);
-    if(S.apiKey&&S.apiKey.startsWith('sk-ant-'))document.getElementById('apiK').value='sk-ant-••••••••';
+    if(S.apiKey&&S.apiKey.startsWith('sk-or-'))document.getElementById('apiK').value='sk-or-••••••••';
     // Populate About card
     const setup=getSetup();
     const q=getQuota();
