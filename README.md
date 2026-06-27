@@ -201,3 +201,4 @@ MIT — use it, learn from it, build on it.
 [LinkedIn](https://www.linkedin.com/in/kowshik-jallipalli-a7b301229)
 
 *First agentic AI project. More coming.*
+ 
