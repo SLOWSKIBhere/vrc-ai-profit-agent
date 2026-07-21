@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' https://api.anthropic.com https://openrouter.ai; connect-src 'self' https://api.anthropic.com https://openrouter.ai; img-src 'self' data:;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; connect-src 'self' https://api.anthropic.com https://openrouter.ai; img-src 'self' data:; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline';">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>VRC Stores — AI Profit Agent v5</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js" integrity="sha512-SIMGYRUjwY8+gKg7nn9EItdD8LCADSDfJNutF9TPrvEo86sQmFMh6MyralfIyhADlajSxqc7G0gs7+MwWF/ogQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <style>
 :root{
   --g1:#0d2b1a;--g2:#1a472a;--g3:#2d6a4f;--g4:#40916c;
@@ -1452,7 +1452,7 @@ function copyWA(){
   const txt=document.getElementById('waMsg').textContent;
   const al=document.getElementById('waAl');
   if(txt.startsWith('Save')){sAl(al,'warn','Save entry first.');return;}
-  const fn=()=>{sAl(al,'ok','✅ Copied! Opening WhatsApp...');setTimeout(()=>{window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');},300);};
+  const fn=()=>{sAl(al,'ok','✅ Copied! Opening WhatsApp...');setTimeout(()=>{window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank','noopener,noreferrer');},300);};
   if(navigator.clipboard)navigator.clipboard.writeText(txt).then(fn).catch(()=>fb(txt,al));
   else fb(txt,al);
 }
