@@ -1590,41 +1590,170 @@ function exportJSON(){
   sAl(document.getElementById('backupAl'),'ok','✅ Backup downloaded! Save to Google Drive or WhatsApp to yourself. Note: API key is not included (security).');
 }
 
+
+const BACKUP_MAX_BYTES=5*1024*1024;
+
+function isPlainObject(value){
+  return value!==null&&typeof value==='object'&&!Array.isArray(value);
+}
+
+function isValidBackupDate(value){
+  if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;
+  const parts=value.split('-').map(Number);
+  const date=new Date(Date.UTC(parts[0],parts[1]-1,parts[2]));
+  return date.getUTCFullYear()===parts[0]
+    &&date.getUTCMonth()===parts[1]-1
+    &&date.getUTCDate()===parts[2];
+}
+
+function assertBackup(condition,message){
+  if(!condition)throw new Error('Invalid backup: '+message);
+}
+
+function validateBackup(data){
+  assertBackup(isPlainObject(data),'top-level value must be an object.');
+  if(data.version!==undefined){
+    assertBackup(Number.isInteger(data.version)&&data.version>=1&&data.version<=4,'unsupported version.');
+  }
+  if(data.exportDate!==undefined){
+    assertBackup(typeof data.exportDate==='string'&&!Number.isNaN(Date.parse(data.exportDate)),'exportDate is invalid.');
+  }
+  assertBackup(Array.isArray(data.allR),'allR records are missing.');
+  assertBackup(data.allK===undefined||Array.isArray(data.allK),'allK must be an array.');
+  if(data.tgt!==undefined){
+    assertBackup(Number.isSafeInteger(data.tgt)&&data.tgt>=100&&data.tgt<=999999,'daily target is invalid.');
+  }
+
+  const seenDates=new Set();
+  const allR=data.allR.map((record,index)=>{
+    const label='record '+(index+1);
+    assertBackup(isPlainObject(record),label+' must be an object.');
+    assertBackup(isValidBackupDate(record.date),label+' has an invalid date.');
+    assertBackup(!seenDates.has(record.date),'duplicate record date '+record.date+'.');
+    seenDates.add(record.date);
+
+    for(const field of ['upi','cash','revenue','expenses']){
+      assertBackup(Number.isSafeInteger(record[field])&&record[field]>=0,label+' has invalid '+field+'.');
+    }
+    assertBackup(Number.isSafeInteger(record.profit),label+' has invalid profit.');
+    assertBackup(record.revenue===record.upi+record.cash,label+' revenue does not equal UPI + cash.');
+    assertBackup(record.profit===record.revenue-record.expenses,label+' profit does not equal revenue - expenses.');
+
+    if(record.khataGiven!==undefined){
+      assertBackup(Number.isSafeInteger(record.khataGiven)&&record.khataGiven>=0,label+' has invalid khataGiven.');
+    }
+    if(record.timestamp!==undefined){
+      assertBackup(Number.isSafeInteger(record.timestamp)&&record.timestamp>=0,label+' has an invalid timestamp.');
+    }
+    if(record.expBreakdown!==undefined){
+      assertBackup(Array.isArray(record.expBreakdown),label+' expBreakdown must be an array.');
+      record.expBreakdown.forEach((expense,expenseIndex)=>{
+        const expenseLabel=label+' expense '+(expenseIndex+1);
+        assertBackup(isPlainObject(expense),expenseLabel+' must be an object.');
+        assertBackup(typeof expense.cat==='string'&&expense.cat.trim().length>0&&expense.cat.length<=50,expenseLabel+' has an invalid category.');
+        assertBackup(expense.desc===undefined||(typeof expense.desc==='string'&&expense.desc.length<=100),expenseLabel+' has an invalid description.');
+        assertBackup(Number.isSafeInteger(expense.amount)&&expense.amount>0&&expense.amount<1000000,expenseLabel+' has an invalid amount.');
+      });
+    }
+
+    return{
+      ...record,
+      ...(record.expBreakdown===undefined
+        ?{}
+        :{expBreakdown:record.expBreakdown.map(expense=>({...expense}))})
+    };
+  });
+
+  const allK=(data.allK||[]).map((entry,index)=>{
+    const label='khata entry '+(index+1);
+    assertBackup(isPlainObject(entry),label+' must be an object.');
+    assertBackup(typeof entry.name==='string'&&entry.name.trim().length>0&&entry.name.length<=50,label+' has an invalid name.');
+    assertBackup(isValidBackupDate(entry.date),label+' has an invalid date.');
+    assertBackup(Number.isSafeInteger(entry.amount)&&entry.amount>0&&entry.amount<1000000,label+' has an invalid amount.');
+    assertBackup(entry.paid===undefined||typeof entry.paid==='boolean',label+' has an invalid paid status.');
+    return{...entry};
+  });
+
+  return{
+    allR,
+    allK,
+    tgt:data.tgt===undefined?null:data.tgt,
+    exportDateLabel:typeof data.exportDate==='string'?data.exportDate.slice(0,10):'unknown date'
+  };
+}
+
 function importJSON(input){
   const al=document.getElementById('backupAl');
   const file=input.files[0];
-  if(!file){return;}
-  if(!file.name.endsWith('.json')){sAl(al,'err','❌ Please select a .json backup file (not CSV).');return;}
+  if(!file)return;
+  if(!file.name.toLowerCase().endsWith('.json')){
+    sAl(al,'err','❌ Please select a .json backup file (not CSV).');
+    input.value='';
+    return;
+  }
+  if(file.size>BACKUP_MAX_BYTES){
+    sAl(al,'err','❌ Backup is larger than 5 MB and cannot be restored safely.');
+    input.value='';
+    return;
+  }
+
   const reader=new FileReader();
   reader.onload=function(e){
     try{
-      const data=JSON.parse(e.target.result);
-      if(!Array.isArray(data.allR)){sAl(al,'err','❌ Invalid backup file. allR records missing.');return;}
+      const validated=validateBackup(JSON.parse(e.target.result));
       const confirmed=confirm(
-        'Restore backup from '+data.exportDate?.slice(0,10)+'?\n\n'+
-        '• '+data.allR.length+' day records\n'+
-        '• '+(data.allK||[]).length+' khata entries\n\n'+
+        'Restore backup from '+validated.exportDateLabel+'?\n\n'+
+        '• '+validated.allR.length+' day records\n'+
+        '• '+validated.allK.length+' khata entries\n\n'+
         '⚠️ This will MERGE with your current data.\nExisting records for the same dates will be overwritten.'
       );
-      if(!confirmed){input.value='';return;}
-      // Merge: newer record for same date wins (backup wins over existing)
-      const dateMap={};
-      S.allR.forEach(r=>{dateMap[r.date]=r;});
-      data.allR.forEach(r=>{dateMap[r.date]=r;});
-      S.allR=Object.values(dateMap).sort((a,b)=>a.date.localeCompare(b.date));
-      // Merge khata (add entries that don't already exist by name+date+amount)
-      const khKey=k=>k.name+'|'+k.date+'|'+k.amount;
-      const existingKeys=new Set(S.allK.map(khKey));
-      (data.allK||[]).forEach(k=>{if(!existingKeys.has(khKey(k)))S.allK.push(k);});
-      if(typeof data.tgt==='number')S.tgt=data.tgt;
-      sv();
+      if(!confirmed)return;
+
+      // Build the complete next state before changing memory or storage.
+      const dateMap=new Map(S.allR.map(record=>[record.date,record]));
+      validated.allR.forEach(record=>dateMap.set(record.date,record));
+      const nextAllR=Array.from(dateMap.values()).sort((a,b)=>a.date.localeCompare(b.date));
+
+      const nextAllK=S.allK.slice();
+      const khKey=entry=>JSON.stringify([entry.name,entry.date,entry.amount]);
+      const existingKeys=new Set(nextAllK.map(khKey));
+      validated.allK.forEach(entry=>{
+        const key=khKey(entry);
+        if(!existingKeys.has(key)){
+          nextAllK.push(entry);
+          existingKeys.add(key);
+        }
+      });
+
+      const nextTgt=validated.tgt===null?S.tgt:validated.tgt;
+      const serialized=JSON.stringify({
+        allR:nextAllR,
+        allK:nextAllK,
+        fest:S.fest,
+        tgt:nextTgt
+      });
+
+      // Persist first. If this throws, the live in-memory state is untouched.
+      localStorage.setItem(SK,serialized);
+      S.allR=nextAllR;
+      S.allK=nextAllK;
+      S.tgt=nextTgt;
+
       sAl(al,'ok','✅ Backup restored! '+S.allR.length+' day records, '+S.allK.length+' khata entries loaded.');
-      bWeek();bTrend();bKhata();
-    }catch(err){sAl(al,'err','❌ Could not read backup file: '+err.message);}
+      try{bWeek();bTrend();bKhata();}catch(renderErr){console.warn('Restore render warning:',renderErr);}
+    }catch(err){
+      sAl(al,'err','❌ Restore failed: '+err.message);
+    }finally{
+      input.value='';
+    }
+  };
+  reader.onerror=function(){
+    sAl(al,'err','❌ Could not read the selected backup file.');
     input.value='';
   };
   reader.readAsText(file);
 }
+
 function clearAll(){if(!confirm('⚠️ Delete ALL data?'))return;if(!confirm('Really sure?'))return;S.allR=[];S.allK=[];sv();alert('Cleared.');}
 
 function loadDemo(){
