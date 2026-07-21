@@ -535,10 +535,17 @@ const SETUP_SK='vrc_setup';   // first-run setup (shop name, pwd hash, salt)
 const SEC_SK='vrc_sec';       // encrypted API key (AES-GCM blob)
 const QUOTA_SK='vrc_quota';   // daily AI call counter
 const AI_CACHE_SK='vrc_ai_cache'; // same-day AI response cache
+const APP_TIME_ZONE='Asia/Kolkata';
 const AUTH_VERSION=2;
 const KDF_ITERATIONS=250000;
 const LEGACY_KDF_ITERATIONS=100000;
 const AUTH_VERIFIER_TEXT='vrc-auth-verifier-v2';
+const DATE_KEY_FORMATTER=new Intl.DateTimeFormat('en-US',{
+  timeZone:APP_TIME_ZONE,
+  year:'numeric',
+  month:'2-digit',
+  day:'2-digit'
+});
 
 let sessionKey=null;  // CryptoKey in memory only — cleared on logout
 // sha256hex remains only for one-time migration of legacy pwdHash setups.
@@ -571,7 +578,17 @@ function san(el){el.value=el.value.replace(/<[^>]*>/g,'').replace(/[<>"'`\\]/g,'
 function vN(el){let v=parseFloat(el.value);if(isNaN(v)||v<0)el.value='';if(v>999999)el.value=999999;}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 function Rs(n){return 'Rs '+Number(n||0).toLocaleString('en-IN');}
-function td(){return new Date().toISOString().slice(0,10);}
+function td(date=new Date()){
+  const parts={};
+  DATE_KEY_FORMATTER.formatToParts(date).forEach(part=>{
+    if(part.type!=='literal')parts[part.type]=part.value;
+  });
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+function dateKeyDay(dateKey){
+  const [year,month,day]=dateKey.split('-').map(Number);
+  return new Date(Date.UTC(year,month-1,day)).getUTCDay();
+}
 function sAl(el,t,m){if(!el)return;el.className='al '+t;el.textContent=m;el.style.display='block';setTimeout(()=>{if(el)el.style.display='none';},4500);}
 
 
@@ -1305,7 +1322,7 @@ Max 200 words. Direct. Actionable. Context: village cloth shop, India.`;
     const txt=data.choices?.[0]?.message?.content||data.content?.[0]?.text||'No response.';
     const fmt=txt.split('\n').filter(l=>l.trim()).map(l=>{const m=l.match(/^(\d)\.\s*([\w\s]+):\s*(.*)/);return m?`<div style="margin-bottom:10px"><b style="color:var(--purple)">${esc(m[2])}:</b> ${esc(m[3])}</div>`:`<p style="color:var(--text);margin-bottom:6px;font-size:13px">${esc(l)}</p>`;}).join('');
     setPipeStep('p4','done','✅ Done','AI analysis complete — see full output below.');
-    const aiHTML=`<div class="ai-box" style="margin-top:12px"><div class="ai-hd">🤖 ${type==='daily'?'Daily':'Weekly'} AI Analysis · ${new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</div><div class="ai-body">${fmt}</div></div><div class="al info" style="display:block;margin-top:8px;font-size:12px">💡 This is AI guidance only — not certified financial advice. Always verify with your own records.</div>`;
+    const aiHTML=`<div class="ai-box" style="margin-top:12px"><div class="ai-hd">🤖 ${type==='daily'?'Daily':'Weekly'} AI Analysis · ${new Date().toLocaleTimeString('en-IN',{timeZone:APP_TIME_ZONE,hour:'2-digit',minute:'2-digit'})}</div><div class="ai-body">${fmt}</div></div><div class="al info" style="display:block;margin-top:8px;font-size:12px">💡 This is AI guidance only — not certified financial advice. Always verify with your own records.</div>`;
     out.innerHTML=aiHTML;
     // Cache for same-day re-runs
     try{localStorage.setItem(AI_CACHE_SK,JSON.stringify({key:cacheKey,html:aiHTML}));}catch{/* storage full — skip cache */}
@@ -1356,7 +1373,7 @@ function bTrend(){
   const dayNames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const dayBuckets={};
   recs.forEach(r=>{
-    const d=new Date(r.date).getDay();
+    const d=dateKeyDay(r.date);
     const name=dayNames[d];
     if(!dayBuckets[name])dayBuckets[name]={total:0,count:0};
     dayBuckets[name].total+=r.revenue;
@@ -1805,7 +1822,7 @@ function init(){
   // Use saved shop name from setup if available
   const setup=getSetup();
   const location=setup?setup.shopName:'Chintalapudi';
-  document.getElementById('hdrDate').textContent=location+' · '+now.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  document.getElementById('hdrDate').textContent=location+' · '+now.toLocaleDateString('en-IN',{timeZone:APP_TIME_ZONE,weekday:'long',day:'numeric',month:'long',year:'numeric'});
   document.getElementById('fTog').checked=S.fest;
   document.getElementById('dTgt').value=S.tgt;
   if(S.fest){document.getElementById('festP').style.display='block';document.getElementById('festCard').style.display='block';}
