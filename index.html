@@ -535,6 +535,7 @@ const SETUP_SK='vrc_setup';   // first-run setup (shop name, pwd hash, salt)
 const SEC_SK='vrc_sec';       // encrypted API key (AES-GCM blob)
 const QUOTA_SK='vrc_quota';   // daily AI call counter
 const AI_CACHE_SK='vrc_ai_cache'; // same-day AI response cache
+const AI_CACHE_VERSION=2;
 const APP_TIME_ZONE='Asia/Kolkata';
 const AUTH_VERSION=2;
 const KDF_ITERATIONS=250000;
@@ -1132,6 +1133,16 @@ function resetPipe(){
   document.getElementById('aiOut').innerHTML='';
 }
 
+async function aiCacheDataHash(type){
+  return sha256hex(JSON.stringify({
+    version:AI_CACHE_VERSION,
+    type,
+    date:td(),
+    festivalMode:type==='daily'?S.fest:null,
+    records:S.allR
+  }));
+}
+
 async function runAgentPipeline(type){
   const key=S.apiKey;
   const out=document.getElementById('aiOut');
@@ -1230,19 +1241,12 @@ async function runAgentPipeline(type){
 
   setPipeStep('p4','running','Calling Claude…',`<div class="ld"><div class="sp2"></div><span>Claude is reading your shop data…</span></div>`);
 
-  // ── PHASE 2: Quota check + bump ──
-  const quota=getQuota();
-  if(quota.used>=quota.max){
-    setPipeStep('p4','warn','Quota Reached',`You've used all ${quota.max} AI calls for today. Resets at midnight. Agents 1–3 stats are still shown above.`);
-    document.getElementById('aiOut').innerHTML=`<div class="al warn" style="display:block;margin-top:10px">⚠️ Daily AI limit reached (${quota.max} calls). Come back tomorrow, or the rule-based insights from Agents 1–3 above are already useful!</div>`;
-    return;
-  }
-
-  // ── PHASE 3: Same-day response cache ──
+  // ── Same-day response cache (free, so check before quota) ──
   const cacheKey=`${type}_${td()}`;
+  const dataHash=await aiCacheDataHash(type);
   try{
     const cached=JSON.parse(localStorage.getItem(AI_CACHE_SK)||'{}');
-    if(cached.key===cacheKey&&cached.html){
+    if(cached.key===cacheKey&&cached.dataHash===dataHash&&cached.html){
       setPipeStep('p4','done','✅ Cached','Using today\'s saved AI analysis — no extra API call needed.');
       // SECURITY: sanitize cached HTML before injection to prevent XSS
 // strip <script> blocks and on* event handlers from AI-cached output
@@ -1256,6 +1260,14 @@ document.getElementById('aiOut').innerHTML=sanitizeCachedHtml(cached.html)+`<div
       return;
     }
   }catch{/* cache miss — continue to API */}
+
+  // ── Quota check + bump ──
+  const quota=getQuota();
+  if(quota.used>=quota.max){
+    setPipeStep('p4','warn','Quota Reached',`You've used all ${quota.max} AI calls for today. Resets at midnight. Agents 1–3 stats are still shown above.`);
+    document.getElementById('aiOut').innerHTML=`<div class="al warn" style="display:block;margin-top:10px">⚠️ Daily AI limit reached (${quota.max} calls). Come back tomorrow, or the rule-based insights from Agents 1–3 above are already useful!</div>`;
+    return;
+  }
 
   bumpQuota(); // Count this call
 
@@ -1325,7 +1337,7 @@ Max 200 words. Direct. Actionable. Context: village cloth shop, India.`;
     const aiHTML=`<div class="ai-box" style="margin-top:12px"><div class="ai-hd">🤖 ${type==='daily'?'Daily':'Weekly'} AI Analysis · ${new Date().toLocaleTimeString('en-IN',{timeZone:APP_TIME_ZONE,hour:'2-digit',minute:'2-digit'})}</div><div class="ai-body">${fmt}</div></div><div class="al info" style="display:block;margin-top:8px;font-size:12px">💡 This is AI guidance only — not certified financial advice. Always verify with your own records.</div>`;
     out.innerHTML=aiHTML;
     // Cache for same-day re-runs
-    try{localStorage.setItem(AI_CACHE_SK,JSON.stringify({key:cacheKey,html:aiHTML}));}catch{/* storage full — skip cache */}
+    try{localStorage.setItem(AI_CACHE_SK,JSON.stringify({key:cacheKey,dataHash,html:aiHTML}));}catch{/* storage full — skip cache */}
     if(type==='daily'&&rec)bWA(rec,txt.split('\n').find(l=>l.length>20)||'');
   }catch(e){
     setPipeStep('p4','fail','❌ Error',esc(e.message));
