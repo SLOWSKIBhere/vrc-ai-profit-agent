@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' https://api.anthropic.com https://openrouter.ai; connect-src 'self' https://api.anthropic.com https://openrouter.ai; img-src 'self' data:;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; connect-src 'self' https://api.anthropic.com https://openrouter.ai; img-src 'self' data:; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline';">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>VRC Stores — AI Profit Agent v5</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js" integrity="sha512-SIMGYRUjwY8+gKg7nn9EItdD8LCADSDfJNutF9TPrvEo86sQmFMh6MyralfIyhADlajSxqc7G0gs7+MwWF/ogQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <style>
 :root{
   --g1:#0d2b1a;--g2:#1a472a;--g3:#2d6a4f;--g4:#40916c;
@@ -419,8 +419,8 @@ input:checked+.slr::before{transform:translateX(20px)}
         </div>
       </div>
       <div class="row" style="margin-top:14px">
-        <button class="btn bai" onclick="runAgentPipeline('daily')">🤖 Run Daily Pipeline</button>
-        <button class="btn bai" onclick="runAgentPipeline('weekly')">📈 Run Weekly Pipeline</button>
+        <button id="runDailyPipelineButton" class="btn bai" onclick="runAgentPipeline('daily')">🤖 Run Daily Pipeline</button>
+        <button id="runWeeklyPipelineButton" class="btn bai" onclick="runAgentPipeline('weekly')">📈 Run Weekly Pipeline</button>
       </div>
       <div id="aiOut"></div>
       <div class="al info" style="display:block;margin-top:10px;font-size:12px">⚠️ AI output is guidance only — not certified financial advice. Always verify with your own records.</div>
@@ -535,10 +535,22 @@ const SETUP_SK='vrc_setup';   // first-run setup (shop name, pwd hash, salt)
 const SEC_SK='vrc_sec';       // encrypted API key (AES-GCM blob)
 const QUOTA_SK='vrc_quota';   // daily AI call counter
 const AI_CACHE_SK='vrc_ai_cache'; // same-day AI response cache
+const AI_CACHE_VERSION=2;
+const APP_TIME_ZONE='Asia/Kolkata';
+const AUTH_VERSION=2;
+const KDF_ITERATIONS=250000;
+const LEGACY_KDF_ITERATIONS=100000;
+const AUTH_VERIFIER_TEXT='vrc-auth-verifier-v2';
+const DATE_KEY_FORMATTER=new Intl.DateTimeFormat('en-US',{
+  timeZone:APP_TIME_ZONE,
+  year:'numeric',
+  month:'2-digit',
+  day:'2-digit'
+});
 
 let sessionKey=null;  // CryptoKey in memory only — cleared on logout
-// NOTE: PASS constant removed in v4. Password is SHA-256 hashed and
-// stored in localStorage after first-run setup. Never stored in source.
+// sha256hex remains only for one-time migration of legacy pwdHash setups.
+// New setups verify passwords through the PBKDF2-derived encrypted verifier.
 const PROFILE={
   normal:{min:2500,max:6000,expPct:.52,dayMult:[.85,.90,.95,1,1.05,1.35,1.20]},
   festival:{min:12000,max:45000,expPct:.38,dayMult:[.90,.92,.95,1,1.05,1.40,1.30]}
@@ -567,72 +579,96 @@ function san(el){el.value=el.value.replace(/<[^>]*>/g,'').replace(/[<>"'`\\]/g,'
 function vN(el){let v=parseFloat(el.value);if(isNaN(v)||v<0)el.value='';if(v>999999)el.value=999999;}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 function Rs(n){return 'Rs '+Number(n||0).toLocaleString('en-IN');}
-function td(){return new Date().toISOString().slice(0,10);}
+function td(date=new Date()){
+  const parts={};
+  DATE_KEY_FORMATTER.formatToParts(date).forEach(part=>{
+    if(part.type!=='literal')parts[part.type]=part.value;
+  });
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+function dateKeyDay(dateKey){
+  const [year,month,day]=dateKey.split('-').map(Number);
+  return new Date(Date.UTC(year,month-1,day)).getUTCDay();
+}
 function sAl(el,t,m){if(!el)return;el.className='al '+t;el.textContent=m;el.style.display='block';setTimeout(()=>{if(el)el.style.display='none';},4500);}
+
+
+function getLoginLock(){
+  try{
+    const lock=JSON.parse(localStorage.getItem('vrc_lock')||'{}');
+    if(lock.until&&Date.now()>=lock.until)return{attempts:0};
+    return lock;
+  }catch{return{attempts:0};}
+}
+
+function recordFailedLogin(errorEl){
+  const lock=getLoginLock();
+  lock.attempts=(lock.attempts||0)+1;
+  if(lock.attempts>=5){
+    lock.until=Date.now()+15*60*1000;
+    lock.attempts=0;
+    localStorage.setItem('vrc_lock',JSON.stringify(lock));
+    errorEl.textContent='Too many failed attempts. Locked for 15 minutes.';
+  }else{
+    localStorage.setItem('vrc_lock',JSON.stringify(lock));
+    const remaining=5-lock.attempts;
+    errorEl.textContent='❌ Wrong password. '+remaining+' attempt'+(remaining!==1?'s':'')+' remaining.';
+  }
+}
 
 async function doLogin(){
   const p=document.getElementById('pw').value;
   const e=document.getElementById('lErr');
   if(!p){e.textContent='Enter password.';return;}
-  // Brute force protection — max 5 attempts, 15min lockout
-  const lockKey='vrc_lock';
-  try{
-    const lock=JSON.parse(sessionStorage.getItem(lockKey)||'{}');
-    if(lock.until&&Date.now()<lock.until){
-      const mins=Math.ceil((lock.until-Date.now())/60000);
-      e.textContent=`Too many attempts. Try again in ${mins} minute${mins>1?'s':''}.`;
-      document.getElementById('pw').value='';
-      return;
-    }
-  }catch{/* no lock */}
+
+  const lock=getLoginLock();
+  if(lock.until&&Date.now()<lock.until){
+    const mins=Math.ceil((lock.until-Date.now())/60000);
+    e.textContent='Too many attempts. Try again in '+mins+' minute'+(mins>1?'s':'')+'.';
+    document.getElementById('pw').value='';
+    return;
+  }
+
   const setup=getSetup();
   if(!setup){e.textContent='Setup not complete. Please refresh.';return;}
+
   try{
-    const enteredHash=await sha256hex(p);
-    if(enteredHash!==setup.pwdHash){
-      // Track failed attempts
-      const lockKey='vrc_lock';
-      const lock=JSON.parse(sessionStorage.getItem(lockKey)||'{"attempts":0}');
-      lock.attempts=(lock.attempts||0)+1;
-      if(lock.attempts>=5){
-        lock.until=Date.now()+15*60*1000; // 15min lockout
-        lock.attempts=0;
-        sessionStorage.setItem(lockKey,JSON.stringify(lock));
-        e.textContent='Too many failed attempts. Locked for 15 minutes.';
-      } else {
-        sessionStorage.setItem(lockKey,JSON.stringify(lock));
-        e.textContent=`❌ Wrong password. ${5-lock.attempts} attempt${5-lock.attempts!==1?'s':''} remaining.`;
-      }
+    const verifiedKey=await verifyPassword(p,setup);
+    if(!verifiedKey){
+      recordFailedLogin(e);
       document.getElementById('pw').value='';
       document.getElementById('pw').focus();
       return;
     }
-    // Successful login — clear lockout
-    sessionStorage.removeItem('vrc_lock');
-    // Correct password — derive session encryption key
-    const salt=b64d(setup.salt);
-    sessionKey=await deriveAESKey(p,salt);
-    // Decrypt API key from secure storage into memory
+
+    localStorage.removeItem('vrc_lock');
+    sessionKey=verifiedKey;
     await loadDecryptedKey();
-    // Load data and show app
     document.getElementById('login').style.display='none';
     document.getElementById('app').style.display='block';
     ld();init();
     startIdleTimer();
     renderQuotaBadge();
-  }catch(err){e.textContent='Login error: '+err.message;}
+  }catch(err){
+    sessionKey=null;
+    e.textContent='Login error: '+err.message;
+  }
 }
 
-function doLogout(){
-  if(!confirm('Logout?'))return;
-  sessionKey=null;      // wipe crypto key from memory
-  S.apiKey='';          // wipe from in-memory state
+function lockSession(){
+  sessionKey=null;
+  S.apiKey='';
   stopIdleTimer();
   document.getElementById('app').style.display='none';
   document.getElementById('login').style.display='flex';
   document.getElementById('pw').value='';
   document.getElementById('sessWarn').classList.remove('show');
   resetT();
+}
+
+function doLogout(){
+  if(!confirm('Logout?'))return;
+  lockSession();
 }
 
 function parseUPI(txt){
@@ -759,10 +795,13 @@ async function sha256hex(str){
   return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
 }
 
-async function deriveAESKey(password,salt){
+async function deriveAESKey(password,salt,iterations=KDF_ITERATIONS){
+  const safeIterations=Number.isInteger(iterations)&&iterations>=LEGACY_KDF_ITERATIONS
+    ?iterations
+    :KDF_ITERATIONS;
   const raw=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),{name:'PBKDF2'},false,['deriveKey']);
   return crypto.subtle.deriveKey(
-    {name:'PBKDF2',salt,iterations:250000,hash:'SHA-256'},
+    {name:'PBKDF2',salt,iterations:safeIterations,hash:'SHA-256'},
     raw,{name:'AES-GCM',length:256},false,['encrypt','decrypt']
   );
 }
@@ -783,6 +822,68 @@ async function decryptStr(encObj,cryptoKey){
 
 function b64e(buf){return btoa(String.fromCharCode(...new Uint8Array(buf)));}
 function b64d(str){return Uint8Array.from(atob(str),c=>c.charCodeAt(0));}
+
+
+async function deriveLegacySessionKey(password,setup){
+  const salt=b64d(setup.salt);
+  const configured=Number.isInteger(setup.kdfIterations)?setup.kdfIterations:null;
+  const candidates=configured
+    ?[configured]
+    :[KDF_ITERATIONS,LEGACY_KDF_ITERATIONS];
+  const encryptedRaw=localStorage.getItem(SEC_SK);
+  let encrypted=null;
+  if(encryptedRaw){
+    try{encrypted=JSON.parse(encryptedRaw);}catch{/* corrupted legacy key */}
+  }
+
+  for(const iterations of candidates){
+    const key=await deriveAESKey(password,salt,iterations);
+    if(!encrypted)return{key,iterations};
+    const plaintext=await decryptStr(encrypted,key);
+    if(typeof plaintext==='string'&&plaintext.length>0)return{key,iterations};
+  }
+
+  return{
+    key:await deriveAESKey(password,salt,KDF_ITERATIONS),
+    iterations:KDF_ITERATIONS
+  };
+}
+
+async function verifyPassword(password,setup){
+  if(!setup||!setup.salt)return null;
+  const salt=b64d(setup.salt);
+
+  if(setup.verifier){
+    const iterations=Number.isInteger(setup.kdfIterations)
+      ?setup.kdfIterations
+      :KDF_ITERATIONS;
+    const key=await deriveAESKey(password,salt,iterations);
+    const check=await decryptStr(setup.verifier,key);
+    return check===AUTH_VERIFIER_TEXT?key:null;
+  }
+
+  // One-time compatibility path for existing pwdHash users.
+  if(!setup.pwdHash)return null;
+  const enteredHash=await sha256hex(password);
+  if(enteredHash!==setup.pwdHash)return null;
+
+  const legacy=await deriveLegacySessionKey(password,setup);
+  const verifier=await encryptStr(AUTH_VERIFIER_TEXT,legacy.key);
+  const migrated={
+    ...setup,
+    authVersion:AUTH_VERSION,
+    kdfIterations:legacy.iterations,
+    verifier,
+    authMigratedAt:new Date().toISOString()
+  };
+  delete migrated.pwdHash;
+
+  // Authentication still succeeds if storage is temporarily full;
+  // the legacy hash remains in place and migration retries next login.
+  try{saveSetup(migrated);}catch(err){console.warn('Auth migration deferred:',err);}
+
+  return legacy.key;
+}
 
 // ══════════════════════════════════════════════════════════
 //  PHASE 2: SETUP STORAGE HELPERS
@@ -805,7 +906,7 @@ let swData={shopName:'',ownerName:'',password:'',target:3000};
 
 function checkFirstRun(){
   const setup=getSetup();
-  if(!setup||!setup.done||!setup.pwdHash){
+  if(!setup||!setup.done||(!setup.verifier&&!setup.pwdHash)){
     document.getElementById('setup').classList.add('show');
   } else {
     showLogin();
@@ -882,16 +983,17 @@ async function swFinish(){
     // Generate salt for key derivation
     const salt=crypto.getRandomValues(new Uint8Array(16));
     const saltB64=b64e(salt);
-    // Hash the password
-    const pwdHash=await sha256hex(swData.password);
-    // Derive the session key immediately (so user is "logged in" after setup)
-    sessionKey=await deriveAESKey(swData.password,salt);
-    // Save setup data
+    // Derive one deliberately expensive password key and encrypt a known verifier.
+    sessionKey=await deriveAESKey(swData.password,salt,KDF_ITERATIONS);
+    const verifier=await encryptStr(AUTH_VERIFIER_TEXT,sessionKey);
+    // Save versioned setup data. No fast password hash is stored.
     saveSetup({
       done:true,
       shopName:swData.shopName,
       ownerName:swData.ownerName,
-      pwdHash,
+      authVersion:AUTH_VERSION,
+      kdfIterations:KDF_ITERATIONS,
+      verifier,
       salt:saltB64,
       target:tgt,
       createdAt:new Date().toISOString()
@@ -955,9 +1057,8 @@ function _checkIdle(){
   const idle=Date.now()-lastActivity;
   const remaining=IDLE_LIMIT_MS-idle;
   if(remaining<=0){
-    stopIdleTimer();
+    lockSession();
     alert('🔒 Logged out automatically after 2 hours of inactivity to protect your data.');
-    doLogout();
     return;
   }
   if(remaining<=WARN_BEFORE_MS&&!sessWarnShown){
@@ -1032,7 +1133,29 @@ function resetPipe(){
   document.getElementById('aiOut').innerHTML='';
 }
 
+async function aiCacheDataHash(type){
+  return sha256hex(JSON.stringify({
+    version:AI_CACHE_VERSION,
+    type,
+    date:td(),
+    festivalMode:type==='daily'?S.fest:null,
+    records:S.allR
+  }));
+}
+
+let aiPipelineInFlight=false;
+function setAgentPipelineButtonsDisabled(disabled){
+  ['runDailyPipelineButton','runWeeklyPipelineButton'].forEach(id=>{
+    const button=document.getElementById(id);
+    if(button)button.disabled=disabled;
+  });
+}
+
 async function runAgentPipeline(type){
+  if(aiPipelineInFlight)return;
+  aiPipelineInFlight=true;
+  try{
+  setAgentPipelineButtonsDisabled(true);
   const key=S.apiKey;
   const out=document.getElementById('aiOut');
   resetPipe();
@@ -1130,19 +1253,12 @@ async function runAgentPipeline(type){
 
   setPipeStep('p4','running','Calling Claude…',`<div class="ld"><div class="sp2"></div><span>Claude is reading your shop data…</span></div>`);
 
-  // ── PHASE 2: Quota check + bump ──
-  const quota=getQuota();
-  if(quota.used>=quota.max){
-    setPipeStep('p4','warn','Quota Reached',`You've used all ${quota.max} AI calls for today. Resets at midnight. Agents 1–3 stats are still shown above.`);
-    document.getElementById('aiOut').innerHTML=`<div class="al warn" style="display:block;margin-top:10px">⚠️ Daily AI limit reached (${quota.max} calls). Come back tomorrow, or the rule-based insights from Agents 1–3 above are already useful!</div>`;
-    return;
-  }
-
-  // ── PHASE 3: Same-day response cache ──
+  // ── Same-day response cache (free, so check before quota) ──
   const cacheKey=`${type}_${td()}`;
+  const dataHash=await aiCacheDataHash(type);
   try{
     const cached=JSON.parse(localStorage.getItem(AI_CACHE_SK)||'{}');
-    if(cached.key===cacheKey&&cached.html){
+    if(cached.key===cacheKey&&cached.dataHash===dataHash&&cached.html){
       setPipeStep('p4','done','✅ Cached','Using today\'s saved AI analysis — no extra API call needed.');
       // SECURITY: sanitize cached HTML before injection to prevent XSS
 // strip <script> blocks and on* event handlers from AI-cached output
@@ -1156,6 +1272,14 @@ document.getElementById('aiOut').innerHTML=sanitizeCachedHtml(cached.html)+`<div
       return;
     }
   }catch{/* cache miss — continue to API */}
+
+  // ── Quota check + bump ──
+  const quota=getQuota();
+  if(quota.used>=quota.max){
+    setPipeStep('p4','warn','Quota Reached',`You've used all ${quota.max} AI calls for today. Resets at midnight. Agents 1–3 stats are still shown above.`);
+    document.getElementById('aiOut').innerHTML=`<div class="al warn" style="display:block;margin-top:10px">⚠️ Daily AI limit reached (${quota.max} calls). Come back tomorrow, or the rule-based insights from Agents 1–3 above are already useful!</div>`;
+    return;
+  }
 
   bumpQuota(); // Count this call
 
@@ -1222,14 +1346,18 @@ Max 200 words. Direct. Actionable. Context: village cloth shop, India.`;
     const txt=data.choices?.[0]?.message?.content||data.content?.[0]?.text||'No response.';
     const fmt=txt.split('\n').filter(l=>l.trim()).map(l=>{const m=l.match(/^(\d)\.\s*([\w\s]+):\s*(.*)/);return m?`<div style="margin-bottom:10px"><b style="color:var(--purple)">${esc(m[2])}:</b> ${esc(m[3])}</div>`:`<p style="color:var(--text);margin-bottom:6px;font-size:13px">${esc(l)}</p>`;}).join('');
     setPipeStep('p4','done','✅ Done','AI analysis complete — see full output below.');
-    const aiHTML=`<div class="ai-box" style="margin-top:12px"><div class="ai-hd">🤖 ${type==='daily'?'Daily':'Weekly'} AI Analysis · ${new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</div><div class="ai-body">${fmt}</div></div><div class="al info" style="display:block;margin-top:8px;font-size:12px">💡 This is AI guidance only — not certified financial advice. Always verify with your own records.</div>`;
+    const aiHTML=`<div class="ai-box" style="margin-top:12px"><div class="ai-hd">🤖 ${type==='daily'?'Daily':'Weekly'} AI Analysis · ${new Date().toLocaleTimeString('en-IN',{timeZone:APP_TIME_ZONE,hour:'2-digit',minute:'2-digit'})}</div><div class="ai-body">${fmt}</div></div><div class="al info" style="display:block;margin-top:8px;font-size:12px">💡 This is AI guidance only — not certified financial advice. Always verify with your own records.</div>`;
     out.innerHTML=aiHTML;
     // Cache for same-day re-runs
-    try{localStorage.setItem(AI_CACHE_SK,JSON.stringify({key:cacheKey,html:aiHTML}));}catch{/* storage full — skip cache */}
+    try{localStorage.setItem(AI_CACHE_SK,JSON.stringify({key:cacheKey,dataHash,html:aiHTML}));}catch{/* storage full — skip cache */}
     if(type==='daily'&&rec)bWA(rec,txt.split('\n').find(l=>l.length>20)||'');
   }catch(e){
     setPipeStep('p4','fail','❌ Error',esc(e.message));
     out.innerHTML=`<div class="al warn" style="display:block;margin-top:10px">⚠️ ${esc(e.message)}<br><small style="color:var(--dim)">Tip: Agents 1–3 analysis above is still available and doesn't need an internet connection.</small></div>`;
+  }
+  }finally{
+    aiPipelineInFlight=false;
+    setAgentPipelineButtonsDisabled(false);
   }
 }
 
@@ -1273,7 +1401,7 @@ function bTrend(){
   const dayNames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const dayBuckets={};
   recs.forEach(r=>{
-    const d=new Date(r.date).getDay();
+    const d=dateKeyDay(r.date);
     const name=dayNames[d];
     if(!dayBuckets[name])dayBuckets[name]={total:0,count:0};
     dayBuckets[name].total+=r.revenue;
@@ -1369,7 +1497,7 @@ function copyWA(){
   const txt=document.getElementById('waMsg').textContent;
   const al=document.getElementById('waAl');
   if(txt.startsWith('Save')){sAl(al,'warn','Save entry first.');return;}
-  const fn=()=>{sAl(al,'ok','✅ Copied! Opening WhatsApp...');setTimeout(()=>{window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');},300);};
+  const fn=()=>{sAl(al,'ok','✅ Copied! Opening WhatsApp...');setTimeout(()=>{window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank','noopener,noreferrer');},300);};
   if(navigator.clipboard)navigator.clipboard.writeText(txt).then(fn).catch(()=>fb(txt,al));
   else fb(txt,al);
 }
@@ -1391,6 +1519,7 @@ async function saveKey(){
   }catch(err){sAl(al,'err','Encryption failed: '+err.message);}
 }
 
+
 async function changePassword(){
   const old=document.getElementById('cpOld').value;
   const n1=document.getElementById('cpNew1').value;
@@ -1399,32 +1528,63 @@ async function changePassword(){
   if(!old||!n1||!n2){sAl(al,'warn','Fill in all three fields.');return;}
   if(n1.length<6){sAl(al,'warn','New password must be at least 6 characters.');return;}
   if(n1!==n2){sAl(al,'warn','New passwords do not match.');return;}
+
   const setup=getSetup();
   if(!setup){sAl(al,'err','Setup data missing. Cannot change password.');return;}
+
   try{
-    // Verify old password
-    const oldHash=await sha256hex(old);
-    if(oldHash!==setup.pwdHash){sAl(al,'err','❌ Current password is incorrect.');return;}
-    // Generate fresh salt for new password
-    const newSalt=crypto.getRandomValues(new Uint8Array(16));
-    const newSaltB64=b64e(newSalt);
-    const newHash=await sha256hex(n1);
-    const newKey=await deriveAESKey(n1,newSalt);
-    // Re-encrypt API key with new key if one exists
-    if(S.apiKey&&S.apiKey.startsWith('sk-or-')){
-      const enc=await encryptStr(S.apiKey,newKey);
-      localStorage.setItem(SEC_SK,JSON.stringify(enc));
+    const oldKey=await verifyPassword(old,setup);
+    if(!oldKey){sAl(al,'err','❌ Current password is incorrect.');return;}
+
+    const previousSetupRaw=localStorage.getItem(SETUP_SK);
+    const previousSecRaw=localStorage.getItem(SEC_SK);
+    let apiKey=S.apiKey;
+
+    // Do not orphan an encrypted key if the current session failed to load it.
+    if(previousSecRaw&&!apiKey){
+      const previousEncrypted=JSON.parse(previousSecRaw);
+      apiKey=await decryptStr(previousEncrypted,oldKey);
+      if(!apiKey)throw new Error('Stored API key could not be decrypted. Re-enter it before changing the password.');
     }
-    // Update setup with new hash + salt
-    saveSetup({...setup,pwdHash:newHash,salt:newSaltB64,passwordChangedAt:new Date().toISOString()});
-    // Update session key in memory
+
+    const newSalt=crypto.getRandomValues(new Uint8Array(16));
+    const newKey=await deriveAESKey(n1,newSalt,KDF_ITERATIONS);
+    const newVerifier=await encryptStr(AUTH_VERIFIER_TEXT,newKey);
+    const nextSetup={
+      ...setup,
+      authVersion:AUTH_VERSION,
+      kdfIterations:KDF_ITERATIONS,
+      verifier:newVerifier,
+      salt:b64e(newSalt),
+      passwordChangedAt:new Date().toISOString()
+    };
+    delete nextSetup.pwdHash;
+
+    const nextEncrypted=apiKey?await encryptStr(apiKey,newKey):null;
+
+    try{
+      if(nextEncrypted)localStorage.setItem(SEC_SK,JSON.stringify(nextEncrypted));
+      else localStorage.removeItem(SEC_SK);
+      saveSetup(nextSetup);
+    }catch(writeErr){
+      try{
+        if(previousSecRaw===null)localStorage.removeItem(SEC_SK);
+        else localStorage.setItem(SEC_SK,previousSecRaw);
+        if(previousSetupRaw===null)localStorage.removeItem(SETUP_SK);
+        else localStorage.setItem(SETUP_SK,previousSetupRaw);
+      }catch(rollbackErr){console.error('Password-change rollback failed:',rollbackErr);}
+      throw writeErr;
+    }
+
     sessionKey=newKey;
-    // Clear inputs
+    S.apiKey=apiKey||'';
     document.getElementById('cpOld').value='';
     document.getElementById('cpNew1').value='';
     document.getElementById('cpNew2').value='';
     sAl(al,'ok','✅ Password changed! API key re-encrypted with your new password.');
-  }catch(err){sAl(al,'err','Error: '+err.message);}
+  }catch(err){
+    sAl(al,'err','Error: '+err.message);
+  }
 }
 
 async function loadDecryptedKey(){
@@ -1475,41 +1635,170 @@ function exportJSON(){
   sAl(document.getElementById('backupAl'),'ok','✅ Backup downloaded! Save to Google Drive or WhatsApp to yourself. Note: API key is not included (security).');
 }
 
+
+const BACKUP_MAX_BYTES=5*1024*1024;
+
+function isPlainObject(value){
+  return value!==null&&typeof value==='object'&&!Array.isArray(value);
+}
+
+function isValidBackupDate(value){
+  if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;
+  const parts=value.split('-').map(Number);
+  const date=new Date(Date.UTC(parts[0],parts[1]-1,parts[2]));
+  return date.getUTCFullYear()===parts[0]
+    &&date.getUTCMonth()===parts[1]-1
+    &&date.getUTCDate()===parts[2];
+}
+
+function assertBackup(condition,message){
+  if(!condition)throw new Error('Invalid backup: '+message);
+}
+
+function validateBackup(data){
+  assertBackup(isPlainObject(data),'top-level value must be an object.');
+  if(data.version!==undefined){
+    assertBackup(Number.isInteger(data.version)&&data.version>=1&&data.version<=4,'unsupported version.');
+  }
+  if(data.exportDate!==undefined){
+    assertBackup(typeof data.exportDate==='string'&&!Number.isNaN(Date.parse(data.exportDate)),'exportDate is invalid.');
+  }
+  assertBackup(Array.isArray(data.allR),'allR records are missing.');
+  assertBackup(data.allK===undefined||Array.isArray(data.allK),'allK must be an array.');
+  if(data.tgt!==undefined){
+    assertBackup(Number.isSafeInteger(data.tgt)&&data.tgt>=100&&data.tgt<=999999,'daily target is invalid.');
+  }
+
+  const seenDates=new Set();
+  const allR=data.allR.map((record,index)=>{
+    const label='record '+(index+1);
+    assertBackup(isPlainObject(record),label+' must be an object.');
+    assertBackup(isValidBackupDate(record.date),label+' has an invalid date.');
+    assertBackup(!seenDates.has(record.date),'duplicate record date '+record.date+'.');
+    seenDates.add(record.date);
+
+    for(const field of ['upi','cash','revenue','expenses']){
+      assertBackup(Number.isSafeInteger(record[field])&&record[field]>=0,label+' has invalid '+field+'.');
+    }
+    assertBackup(Number.isSafeInteger(record.profit),label+' has invalid profit.');
+    assertBackup(record.revenue===record.upi+record.cash,label+' revenue does not equal UPI + cash.');
+    assertBackup(record.profit===record.revenue-record.expenses,label+' profit does not equal revenue - expenses.');
+
+    if(record.khataGiven!==undefined){
+      assertBackup(Number.isSafeInteger(record.khataGiven)&&record.khataGiven>=0,label+' has invalid khataGiven.');
+    }
+    if(record.timestamp!==undefined){
+      assertBackup(Number.isSafeInteger(record.timestamp)&&record.timestamp>=0,label+' has an invalid timestamp.');
+    }
+    if(record.expBreakdown!==undefined){
+      assertBackup(Array.isArray(record.expBreakdown),label+' expBreakdown must be an array.');
+      record.expBreakdown.forEach((expense,expenseIndex)=>{
+        const expenseLabel=label+' expense '+(expenseIndex+1);
+        assertBackup(isPlainObject(expense),expenseLabel+' must be an object.');
+        assertBackup(typeof expense.cat==='string'&&expense.cat.trim().length>0&&expense.cat.length<=50,expenseLabel+' has an invalid category.');
+        assertBackup(expense.desc===undefined||(typeof expense.desc==='string'&&expense.desc.length<=100),expenseLabel+' has an invalid description.');
+        assertBackup(Number.isSafeInteger(expense.amount)&&expense.amount>0&&expense.amount<1000000,expenseLabel+' has an invalid amount.');
+      });
+    }
+
+    return{
+      ...record,
+      ...(record.expBreakdown===undefined
+        ?{}
+        :{expBreakdown:record.expBreakdown.map(expense=>({...expense}))})
+    };
+  });
+
+  const allK=(data.allK||[]).map((entry,index)=>{
+    const label='khata entry '+(index+1);
+    assertBackup(isPlainObject(entry),label+' must be an object.');
+    assertBackup(typeof entry.name==='string'&&entry.name.trim().length>0&&entry.name.length<=50,label+' has an invalid name.');
+    assertBackup(isValidBackupDate(entry.date),label+' has an invalid date.');
+    assertBackup(Number.isSafeInteger(entry.amount)&&entry.amount>0&&entry.amount<1000000,label+' has an invalid amount.');
+    assertBackup(entry.paid===undefined||typeof entry.paid==='boolean',label+' has an invalid paid status.');
+    return{...entry};
+  });
+
+  return{
+    allR,
+    allK,
+    tgt:data.tgt===undefined?null:data.tgt,
+    exportDateLabel:typeof data.exportDate==='string'?data.exportDate.slice(0,10):'unknown date'
+  };
+}
+
 function importJSON(input){
   const al=document.getElementById('backupAl');
   const file=input.files[0];
-  if(!file){return;}
-  if(!file.name.endsWith('.json')){sAl(al,'err','❌ Please select a .json backup file (not CSV).');return;}
+  if(!file)return;
+  if(!file.name.toLowerCase().endsWith('.json')){
+    sAl(al,'err','❌ Please select a .json backup file (not CSV).');
+    input.value='';
+    return;
+  }
+  if(file.size>BACKUP_MAX_BYTES){
+    sAl(al,'err','❌ Backup is larger than 5 MB and cannot be restored safely.');
+    input.value='';
+    return;
+  }
+
   const reader=new FileReader();
   reader.onload=function(e){
     try{
-      const data=JSON.parse(e.target.result);
-      if(!Array.isArray(data.allR)){sAl(al,'err','❌ Invalid backup file. allR records missing.');return;}
+      const validated=validateBackup(JSON.parse(e.target.result));
       const confirmed=confirm(
-        'Restore backup from '+data.exportDate?.slice(0,10)+'?\n\n'+
-        '• '+data.allR.length+' day records\n'+
-        '• '+(data.allK||[]).length+' khata entries\n\n'+
+        'Restore backup from '+validated.exportDateLabel+'?\n\n'+
+        '• '+validated.allR.length+' day records\n'+
+        '• '+validated.allK.length+' khata entries\n\n'+
         '⚠️ This will MERGE with your current data.\nExisting records for the same dates will be overwritten.'
       );
-      if(!confirmed){input.value='';return;}
-      // Merge: newer record for same date wins (backup wins over existing)
-      const dateMap={};
-      S.allR.forEach(r=>{dateMap[r.date]=r;});
-      data.allR.forEach(r=>{dateMap[r.date]=r;});
-      S.allR=Object.values(dateMap).sort((a,b)=>a.date.localeCompare(b.date));
-      // Merge khata (add entries that don't already exist by name+date+amount)
-      const khKey=k=>k.name+'|'+k.date+'|'+k.amount;
-      const existingKeys=new Set(S.allK.map(khKey));
-      (data.allK||[]).forEach(k=>{if(!existingKeys.has(khKey(k)))S.allK.push(k);});
-      if(typeof data.tgt==='number')S.tgt=data.tgt;
-      sv();
+      if(!confirmed)return;
+
+      // Build the complete next state before changing memory or storage.
+      const dateMap=new Map(S.allR.map(record=>[record.date,record]));
+      validated.allR.forEach(record=>dateMap.set(record.date,record));
+      const nextAllR=Array.from(dateMap.values()).sort((a,b)=>a.date.localeCompare(b.date));
+
+      const nextAllK=S.allK.slice();
+      const khKey=entry=>JSON.stringify([entry.name,entry.date,entry.amount]);
+      const existingKeys=new Set(nextAllK.map(khKey));
+      validated.allK.forEach(entry=>{
+        const key=khKey(entry);
+        if(!existingKeys.has(key)){
+          nextAllK.push(entry);
+          existingKeys.add(key);
+        }
+      });
+
+      const nextTgt=validated.tgt===null?S.tgt:validated.tgt;
+      const serialized=JSON.stringify({
+        allR:nextAllR,
+        allK:nextAllK,
+        fest:S.fest,
+        tgt:nextTgt
+      });
+
+      // Persist first. If this throws, the live in-memory state is untouched.
+      localStorage.setItem(SK,serialized);
+      S.allR=nextAllR;
+      S.allK=nextAllK;
+      S.tgt=nextTgt;
+
       sAl(al,'ok','✅ Backup restored! '+S.allR.length+' day records, '+S.allK.length+' khata entries loaded.');
-      bWeek();bTrend();bKhata();
-    }catch(err){sAl(al,'err','❌ Could not read backup file: '+err.message);}
+      try{bWeek();bTrend();bKhata();}catch(renderErr){console.warn('Restore render warning:',renderErr);}
+    }catch(err){
+      sAl(al,'err','❌ Restore failed: '+err.message);
+    }finally{
+      input.value='';
+    }
+  };
+  reader.onerror=function(){
+    sAl(al,'err','❌ Could not read the selected backup file.');
     input.value='';
   };
   reader.readAsText(file);
 }
+
 function clearAll(){if(!confirm('⚠️ Delete ALL data?'))return;if(!confirm('Really sure?'))return;S.allR=[];S.allK=[];sv();alert('Cleared.');}
 
 function loadDemo(){
@@ -1561,7 +1850,7 @@ function init(){
   // Use saved shop name from setup if available
   const setup=getSetup();
   const location=setup?setup.shopName:'Chintalapudi';
-  document.getElementById('hdrDate').textContent=location+' · '+now.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  document.getElementById('hdrDate').textContent=location+' · '+now.toLocaleDateString('en-IN',{timeZone:APP_TIME_ZONE,weekday:'long',day:'numeric',month:'long',year:'numeric'});
   document.getElementById('fTog').checked=S.fest;
   document.getElementById('dTgt').value=S.tgt;
   if(S.fest){document.getElementById('festP').style.display='block';document.getElementById('festCard').style.display='block';}
