@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; connect-src 'self' https://api.anthropic.com https://openrouter.ai; img-src 'self' data:; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline';">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>VRC Stores — AI Profit Agent v5</title>
+<title>VRC AI Profit Agent</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js" integrity="sha512-SIMGYRUjwY8+gKg7nn9EItdD8LCADSDfJNutF9TPrvEo86sQmFMh6MyralfIyhADlajSxqc7G0gs7+MwWF/ogQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <style>
 :root{
@@ -211,7 +211,7 @@ input:checked+.slr::before{transform:translateX(20px)}
       <div class="sw-title">Welcome to VRC<br>AI Profit Agent</div>
       <div class="sw-hint">Let's set up your shop in 3 quick steps.<br>This takes less than 2 minutes.</div>
       <label>Shop Name</label>
-      <input type="text" id="swShop" value="Venkata Ramana Cloth Stores" maxlength="60" oninput="san(this)">
+      <input type="text" id="swShop" placeholder="Your shop name" maxlength="60" oninput="san(this)">
       <label>Owner Name</label>
       <input type="text" id="swOwner" placeholder="Your name" maxlength="40" oninput="san(this)">
       <div id="swErr"></div>
@@ -276,8 +276,8 @@ input:checked+.slr::before{transform:translateX(20px)}
 <!-- ══ LOGIN ══════════════════════════════════════════════ -->
 <div id="login" style="position:fixed;inset:0;background:linear-gradient(145deg,var(--g1),var(--g2) 60%,#2d4a1e);display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;padding:24px;z-index:9998">
   <div class="l-logo">🧵</div>
-  <div class="l-title">VENKATA RAMANA<br>CLOTH STORES</div>
-  <div class="l-sub">📍 Chintalapudi · AI Profit Agent v4</div>
+  <div class="l-title" id="loginTitle">YOUR SHOP</div>
+  <div class="l-sub" id="loginSub">AI Profit Agent</div>
   <div class="l-box">
     <label>Shop Password</label>
     <input type="password" id="pw" placeholder="Enter password">
@@ -290,13 +290,13 @@ input:checked+.slr::before{transform:translateX(20px)}
 <div id="app">
   <div class="hdr">
     <div class="hdr-top">
-      <div><div class="hdr-t">🧵 VENKATA RAMANA CLOTH STORES</div><div class="hdr-s" id="hdrDate">Chintalapudi</div></div>
+      <div><div class="hdr-t" id="hdrTitle">🧵 YOUR SHOP</div><div class="hdr-s" id="hdrDate"></div></div>
       <div class="fest-p" id="festP">🎉 Festival</div>
     </div>
   </div>
   <div class="agent-bar">
     <div class="a-dot off" id="aDot"></div>
-    <span id="aStat">AI Agent: Add Anthropic API key in Settings to activate</span>
+    <span id="aStat">AI Agent: Add OpenRouter API key in Settings to activate</span>
   </div>
   <!-- ══ PHASE 2: SESSION IDLE WARNING ══ -->
   <div id="sessWarn">
@@ -466,7 +466,7 @@ input:checked+.slr::before{transform:translateX(20px)}
       <div class="ch">🔑 AI Agent Configuration</div>
       <div class="al info" style="display:block;margin-bottom:12px;font-size:12px">Get free API key at openrouter.ai/keys. Stored only on this device.</div>
       <div class="al warn" style="display:block;margin-bottom:12px;font-size:12px">⚠️ Do not use this app on shared or public devices. Your API key and shop data are stored in this browser only.</div>
-      <label class="fl">Anthropic API Key (sk-or-...)</label>
+      <label class="fl">OpenRouter API Key (sk-or-...)</label>
       <input type="password" id="apiK" placeholder="sk-or-..." oninput="san(this)">
       <button class="btn bai" onclick="saveKey()">💾 Save API Key & Activate Agent</button>
       <div id="keyAl" class="al"></div>
@@ -537,9 +537,12 @@ const QUOTA_SK='vrc_quota';   // daily AI call counter
 const AI_CACHE_SK='vrc_ai_cache'; // same-day AI response cache
 const AI_CACHE_VERSION=2;
 const APP_TIME_ZONE='Asia/Kolkata';
+const APP_VERSION='6';
 const AUTH_VERSION=2;
+const KDF_MIN_ITERATIONS=100000;
 const KDF_ITERATIONS=250000;
-const LEGACY_KDF_ITERATIONS=100000;
+const KDF_MAX_ITERATIONS=1000000;
+const LEGACY_KDF_ITERATIONS=KDF_MIN_ITERATIONS;
 const AUTH_VERIFIER_TEXT='vrc-auth-verifier-v2';
 const DATE_KEY_FORMATTER=new Intl.DateTimeFormat('en-US',{
   timeZone:APP_TIME_ZONE,
@@ -795,10 +798,16 @@ async function sha256hex(str){
   return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
 }
 
-async function deriveAESKey(password,salt,iterations=KDF_ITERATIONS){
-  const safeIterations=Number.isInteger(iterations)&&iterations>=LEGACY_KDF_ITERATIONS
+function normalizeKdfIterations(iterations){
+  return Number.isInteger(iterations)&&
+    iterations>=KDF_MIN_ITERATIONS&&
+    iterations<=KDF_MAX_ITERATIONS
     ?iterations
     :KDF_ITERATIONS;
+}
+
+async function deriveAESKey(password,salt,iterations=KDF_ITERATIONS){
+  const safeIterations=normalizeKdfIterations(iterations);
   const raw=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),{name:'PBKDF2'},false,['deriveKey']);
   return crypto.subtle.deriveKey(
     {name:'PBKDF2',salt,iterations:safeIterations,hash:'SHA-256'},
@@ -826,9 +835,9 @@ function b64d(str){return Uint8Array.from(atob(str),c=>c.charCodeAt(0));}
 
 async function deriveLegacySessionKey(password,setup){
   const salt=b64d(setup.salt);
-  const configured=Number.isInteger(setup.kdfIterations)?setup.kdfIterations:null;
-  const candidates=configured
-    ?[configured]
+  const hasConfigured=Object.prototype.hasOwnProperty.call(setup,'kdfIterations');
+  const candidates=hasConfigured
+    ?[normalizeKdfIterations(setup.kdfIterations)]
     :[KDF_ITERATIONS,LEGACY_KDF_ITERATIONS];
   const encryptedRaw=localStorage.getItem(SEC_SK);
   let encrypted=null;
@@ -836,7 +845,8 @@ async function deriveLegacySessionKey(password,setup){
     try{encrypted=JSON.parse(encryptedRaw);}catch{/* corrupted legacy key */}
   }
 
-  for(const iterations of candidates){
+  for(const candidate of candidates){
+    const iterations=normalizeKdfIterations(candidate);
     const key=await deriveAESKey(password,salt,iterations);
     if(!encrypted)return{key,iterations};
     const plaintext=await decryptStr(encrypted,key);
@@ -854,9 +864,7 @@ async function verifyPassword(password,setup){
   const salt=b64d(setup.salt);
 
   if(setup.verifier){
-    const iterations=Number.isInteger(setup.kdfIterations)
-      ?setup.kdfIterations
-      :KDF_ITERATIONS;
+    const iterations=normalizeKdfIterations(setup.kdfIterations);
     const key=await deriveAESKey(password,salt,iterations);
     const check=await decryptStr(setup.verifier,key);
     return check===AUTH_VERIFIER_TEXT?key:null;
@@ -897,6 +905,24 @@ function saveSetup(obj){
   localStorage.setItem(SETUP_SK,JSON.stringify(obj));
 }
 
+function getShopName(setup=getSetup()){
+  return setup&&typeof setup.shopName==='string'&&setup.shopName.trim()
+    ?setup.shopName.trim()
+    :'Your Shop';
+}
+
+function applyAppIdentity(setup=getSetup()){
+  const shopName=getShopName(setup);
+  document.title=`${shopName} — AI Profit Agent v${APP_VERSION}`;
+  const loginTitle=document.getElementById('loginTitle');
+  const loginSub=document.getElementById('loginSub');
+  const hdrTitle=document.getElementById('hdrTitle');
+  if(loginTitle)loginTitle.textContent=shopName;
+  if(loginSub)loginSub.textContent=`Configured for ${shopName} · AI Profit Agent v${APP_VERSION}`;
+  if(hdrTitle)hdrTitle.textContent='🧵 '+shopName;
+  return shopName;
+}
+
 // ══════════════════════════════════════════════════════════
 //  PHASE 2: FIRST-RUN SETUP WIZARD
 // ══════════════════════════════════════════════════════════
@@ -915,6 +941,7 @@ function checkFirstRun(){
 
 function showLogin(){
   document.getElementById('setup').classList.remove('show');
+  applyAppIdentity();
   document.getElementById('login').style.display='flex';
   setTimeout(()=>{const p=document.getElementById('pw');if(p)p.focus();},100);
 }
@@ -1246,8 +1273,8 @@ async function runAgentPipeline(type){
   // ── AGENT 4: Claude AI Summary ───────────────────────
   await delay(500);
   if(!key||!key.startsWith('sk-or-')){
-    setPipeStep('p4','fail','No API Key','Add Anthropic API key in Settings → More to enable AI analysis.');
-    out.innerHTML=`<div class="al warn" style="display:block;margin-top:10px">⚠️ Agents 1–3 completed. Add an Anthropic API key in <b>⚙️ More → Settings</b> to unlock Agent 4 (AI Summary).<br><br>The trend stats above are already useful insights!</div>`;
+    setPipeStep('p4','fail','No API Key','Add OpenRouter API key in Settings → More to enable AI analysis.');
+    out.innerHTML=`<div class="al warn" style="display:block;margin-top:10px">⚠️ Agents 1–3 completed. Add an OpenRouter API key in <b>⚙️ More → Settings</b> to unlock Agent 4 (AI Summary).<br><br>The trend stats above are already useful insights!</div>`;
     return;
   }
 
@@ -1283,12 +1310,13 @@ document.getElementById('aiOut').innerHTML=sanitizeCachedHtml(cached.html)+`<div
 
   bumpQuota(); // Count this call
 
+  const shopName=getShopName();
   let prompt='';
   if(type==='daily'&&rec){
     const mg=rec.revenue>0?Math.round(rec.profit/rec.revenue*100):0;
     const ep=rec.revenue>0?Math.round(rec.expenses/rec.revenue*100):0;
     const validatorNotes=warnings.length>0?'VALIDATOR WARNINGS: '+warnings.join(' | '):'No validator warnings.';
-    prompt=`You are a business analyst AI for VENKATA RAMANA CLOTH STORES, a cloth shop in Chintalapudi, Andhra Pradesh, India.
+    prompt=`You are a business analyst AI for ${shopName}, a cloth shop in India.
 
 TODAY: Date=${rec.date}, UPI=Rs${rec.upi}, Cash=Rs${rec.cash}, Revenue=Rs${rec.revenue}, Expenses=Rs${rec.expenses}, Profit=Rs${rec.profit}, Margin=${mg}%, ExpensePct=${ep}%, KhataGiven=Rs${rec.khataGiven||0}
 ExpenseBreakdown: ${JSON.stringify(rec.expBreakdown||[])}
@@ -1310,7 +1338,7 @@ Max 150 words. Direct. No fluff. Context: village cloth shop, India.`;
     const best=last7.reduce((a,r)=>r.profit>a.profit?r:a);
     const worst=last7.reduce((a,r)=>r.profit<a.profit?r:a);
     const validatorNotes=warnings.length>0?'VALIDATOR WARNINGS: '+warnings.join(' | '):'No validator warnings.';
-    prompt=`Business analyst AI for VENKATA RAMANA CLOTH STORES, Chintalapudi, Andhra Pradesh.
+    prompt=`Business analyst AI for ${shopName}, a cloth shop in India.
 
 WEEK (${last7.length} days): TotalRevenue=Rs${tR}, TotalProfit=Rs${tP}, TotalExpenses=Rs${tE}, AvgDailyRev=Rs${Math.round(tR/last7.length)}, ProfitableDays=${last7.filter(r=>r.profit>0).length}/${last7.length}, BestDay=${best.date}(Rs${best.profit}), WorstDay=${worst.date}(Rs${worst.profit})
 DailyData: ${JSON.stringify(last7.map(r=>({d:r.date,rev:r.revenue,p:r.profit})))}
@@ -1487,7 +1515,8 @@ function payKh(i){if(i<0||i>=S.allK.length)return;if(!confirm('Mark as paid: '+S
 function bWA(rec,aiNote){
   if(!rec)rec=S.allR.find(r=>r.date===td());if(!rec)return;
   const mg=rec.revenue>0?Math.round(rec.profit/rec.revenue*100):0;
-  let msg=`🧵 VENKATA RAMANA CLOTH STORES\n📍 Chintalapudi, Andhra Pradesh\n📅 ${rec.date}\n${'═'.repeat(28)}\n📱 UPI Received : ${Rs(rec.upi)}\n💵 Cash Received: ${Rs(rec.cash)}\n💸 Expenses     : ${Rs(rec.expenses)}\n${'═'.repeat(28)}\n${rec.profit>=0?'✅':'❌'} NET ${rec.profit>=0?'PROFIT':'LOSS'}: ${Rs(Math.abs(rec.profit))}\n📊 Margin       : ${mg}%`;
+  const shopName=getShopName();
+  let msg=`🧵 ${shopName}\n📅 ${rec.date}\n${'═'.repeat(28)}\n📱 UPI Received : ${Rs(rec.upi)}\n💵 Cash Received: ${Rs(rec.cash)}\n💸 Expenses     : ${Rs(rec.expenses)}\n${'═'.repeat(28)}\n${rec.profit>=0?'✅':'❌'} NET ${rec.profit>=0?'PROFIT':'LOSS'}: ${Rs(Math.abs(rec.profit))}\n📊 Margin       : ${mg}%`;
   if(rec.khataGiven>0)msg+=`\n📒 Khata Given  : ${Rs(rec.khataGiven)}`;
   if(aiNote)msg+=`\n\n💡 ${aiNote.replace(/^\d\.\s*/,'').substring(0,100)}`;
   msg+='\n\n_Via VRC AI Profit Agent_';
@@ -1533,18 +1562,23 @@ async function changePassword(){
   if(!setup){sAl(al,'err','Setup data missing. Cannot change password.');return;}
 
   try{
+    const previousSetupRaw=localStorage.getItem(SETUP_SK);
+    const previousSecRaw=localStorage.getItem(SEC_SK);
     const oldKey=await verifyPassword(old,setup);
     if(!oldKey){sAl(al,'err','❌ Current password is incorrect.');return;}
 
-    const previousSetupRaw=localStorage.getItem(SETUP_SK);
-    const previousSecRaw=localStorage.getItem(SEC_SK);
-    let apiKey=S.apiKey;
+    let apiKey='';
+    let apiKeyMustBeReentered=false;
 
-    // Do not orphan an encrypted key if the current session failed to load it.
-    if(previousSecRaw&&!apiKey){
-      const previousEncrypted=JSON.parse(previousSecRaw);
-      apiKey=await decryptStr(previousEncrypted,oldKey);
-      if(!apiKey)throw new Error('Stored API key could not be decrypted. Re-enter it before changing the password.');
+    if(previousSecRaw!==null){
+      try{
+        const previousEncrypted=JSON.parse(previousSecRaw);
+        const decrypted=await decryptStr(previousEncrypted,oldKey);
+        if(isUsableApiKey(decrypted))apiKey=decrypted;
+        else apiKeyMustBeReentered=true;
+      }catch{
+        apiKeyMustBeReentered=true;
+      }
     }
 
     const newSalt=crypto.getRandomValues(new Uint8Array(16));
@@ -1577,11 +1611,19 @@ async function changePassword(){
     }
 
     sessionKey=newKey;
-    S.apiKey=apiKey||'';
+    S.apiKey=apiKey;
+    updAgentStat();
     document.getElementById('cpOld').value='';
     document.getElementById('cpNew1').value='';
     document.getElementById('cpNew2').value='';
-    sAl(al,'ok','✅ Password changed! API key re-encrypted with your new password.');
+    if(apiKeyMustBeReentered){
+      document.getElementById('apiK').value='';
+      sAl(al,'warn','⚠️ Password changed. The unusable stored API key was removed; re-enter your API key in AI Agent Configuration.');
+    }else if(apiKey){
+      sAl(al,'ok','✅ Password changed! API key re-encrypted with your new password.');
+    }else{
+      sAl(al,'ok','✅ Password changed!');
+    }
   }catch(err){
     sAl(al,'err','Error: '+err.message);
   }
@@ -1594,7 +1636,7 @@ async function loadDecryptedKey(){
     if(!raw){S.apiKey='';return;}
     const enc=JSON.parse(raw);
     const key=await decryptStr(enc,sessionKey);
-    S.apiKey=key||'';
+    S.apiKey=isUsableApiKey(key)?key:'';
   }catch{S.apiKey='';}
 }
 
@@ -1605,7 +1647,8 @@ function togFest(){
   sv();
 }
 function updP(rev){if(!S.fest)return;const t=5000,pct=Math.min(100,Math.round(rev/t*100));document.getElementById('prgBar').style.width=pct+'%';document.getElementById('prgPct').textContent=pct+'%';}
-function updAgentStat(){const on=S.apiKey&&S.apiKey.startsWith('sk-or-');document.getElementById('aDot').className='a-dot'+(on?'':' off');document.getElementById('aStat').textContent=on?'AI Agent: Active — Claude AI ready for smart summaries':'AI Agent: Offline — Add Anthropic API key in Settings';}
+function isUsableApiKey(key){return typeof key==='string'&&key.startsWith('sk-or-')&&key.length>'sk-or-'.length;}
+function updAgentStat(){const on=isUsableApiKey(S.apiKey);document.getElementById('aDot').className='a-dot'+(on?'':' off');document.getElementById('aStat').textContent=on?'AI Agent: Active — Claude AI ready for smart summaries':'AI Agent: Offline — Add OpenRouter API key in Settings';}
 
 function exportCSV(){
   if(!S.allR.length){alert('No records yet.');return;}
@@ -1622,7 +1665,7 @@ function exportJSON(){
   const backup={
     version:4,
     exportDate:new Date().toISOString(),
-    shopName:setup?setup.shopName:'Venkata Ramana Cloth Stores',
+    shopName:getShopName(setup),
     ownerName:setup?setup.ownerName:'',
     allR:S.allR,
     allK:S.allK,
@@ -1832,13 +1875,13 @@ function go(name){
     const about=document.getElementById('aboutInfo');
     if(about&&setup){
       about.innerHTML=
-        `<b>Shop:</b> ${esc(setup.shopName)}<br>`+
+        `<b>Shop:</b> ${esc(getShopName(setup))}<br>`+
         `<b>Owner:</b> ${esc(setup.ownerName||'—')}<br>`+
         `<b>Setup date:</b> ${setup.createdAt?setup.createdAt.slice(0,10):'—'}<br>`+
         `<b>Total records:</b> ${S.allR.length} days saved<br>`+
         `<b>Khata entries:</b> ${S.allK.length}<br>`+
         `<b>AI calls today:</b> ${q.used} / ${q.max}<br>`+
-        `<b>App version:</b> VRC AI Profit Agent v4<br>`+
+        `<b>App version:</b> VRC AI Profit Agent v${APP_VERSION}<br>`+
         `<b>Data location:</b> This device only (browser localStorage)<br>`+
         `<span style="color:var(--red);font-size:11px">⚠️ Clear browser data = all records deleted. Keep backups!</span>`;
     }
@@ -1847,10 +1890,9 @@ function go(name){
 
 function init(){
   const now=new Date();
-  // Use saved shop name from setup if available
   const setup=getSetup();
-  const location=setup?setup.shopName:'Chintalapudi';
-  document.getElementById('hdrDate').textContent=location+' · '+now.toLocaleDateString('en-IN',{timeZone:APP_TIME_ZONE,weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  applyAppIdentity(setup);
+  document.getElementById('hdrDate').textContent=now.toLocaleDateString('en-IN',{timeZone:APP_TIME_ZONE,weekday:'long',day:'numeric',month:'long',year:'numeric'});
   document.getElementById('fTog').checked=S.fest;
   document.getElementById('dTgt').value=S.tgt;
   if(S.fest){document.getElementById('festP').style.display='block';document.getElementById('festCard').style.display='block';}
@@ -1858,7 +1900,7 @@ function init(){
   const r=S.allR.find(r=>r.date===td());if(r)bToday(r);
 }
 
-document.addEventListener('DOMContentLoaded',()=>{checkFirstRun();});
+document.addEventListener('DOMContentLoaded',()=>{applyAppIdentity();checkFirstRun();});
 </script>
 </body>
 </html>
