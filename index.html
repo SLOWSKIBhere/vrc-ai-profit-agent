@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; connect-src 'self' https://api.anthropic.com https://openrouter.ai; img-src 'self' data:; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; connect-src 'self' https://openrouter.ai; img-src 'self' data:; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline';">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>VRC AI Profit Agent</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js" integrity="sha512-SIMGYRUjwY8+gKg7nn9EItdD8LCADSDfJNutF9TPrvEo86sQmFMh6MyralfIyhADlajSxqc7G0gs7+MwWF/ogQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
@@ -821,15 +821,25 @@ async function encryptStr(plaintext,cryptoKey){
   return{iv:b64e(iv),data:b64e(new Uint8Array(enc))};
 }
 
-async function decryptStr(encObj,cryptoKey){
-  try{
-    const iv=b64d(encObj.iv),data=b64d(encObj.data);
-    const dec=await crypto.subtle.decrypt({name:'AES-GCM',iv},cryptoKey,data);
+async function decryptStr(encObj, cryptoKey) {
+  try {
+    const iv = b64d(encObj.iv), data = b64d(encObj.data);
+    const dec = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, cryptoKey, data);
     return new TextDecoder().decode(dec);
-  }catch{return null;}
+  } catch (e) {
+    // OperationError = wrong key/tag mismatch. DataError = bad input format.
+    // Both are expected on wrong password; logged only at debug level.
+    console.debug('[vrc-sec] AES-GCM decrypt failed:', e.name);
+    return null;
+  }
 }
 
-function b64e(buf){return btoa(String.fromCharCode(...new Uint8Array(buf)));}
+function b64e(buf) {
+  const arr = new Uint8Array(buf);
+  let str = '';
+  for (let i = 0; i < arr.length; i++) str += String.fromCharCode(arr[i]);
+  return btoa(str);
+}
 function b64d(str){return Uint8Array.from(atob(str),c=>c.charCodeAt(0));}
 
 
@@ -888,7 +898,25 @@ async function verifyPassword(password,setup){
 
   // Authentication still succeeds if storage is temporarily full;
   // the legacy hash remains in place and migration retries next login.
-  try{saveSetup(migrated);}catch(err){console.warn('Auth migration deferred:',err);}
+  let migrationSucceeded = false;
+  try {
+    saveSetup(migrated);
+    migrationSucceeded = true;
+  } catch(err) {
+    console.warn('Auth migration deferred:', err);
+  }
+
+  if (!migrationSucceeded) {
+    // Show persistent banner — legacy SHA-256 auth is active.
+    // Use setTimeout so the DOM is visible before we write to it.
+    setTimeout(() => {
+      const el = document.getElementById('aStat');
+      if (el) {
+        el.textContent = '⚠️ Security upgrade pending. Go to ⚙️ Settings → Change Password to complete it.';
+        document.getElementById('aDot').classList.add('off');
+      }
+    }, 800);
+  }
 
   return legacy.key;
 }

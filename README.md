@@ -72,7 +72,7 @@ This was designed around a real threat model: a shared family device with no gua
 
 | Layer | Implementation |
 |---|---|
-| Password verification | PBKDF2-SHA-256 (250,000 iterations) derives an AES-GCM key that decrypts a known verifier |
+| Password verification | PBKDF2-SHA-256 (250,000 iterations, 16-byte random salt) derives an AES-GCM key that decrypts a known verifier; plaintext is never stored |
 | Key derivation | PBKDF2 iteration values are bounded from 100,000 to 1,000,000; invalid stored values use the 250,000-iteration default |
 | API key encryption | AES-GCM (256-bit) — the OpenRouter key never touches localStorage in plaintext |
 | Session management | 2-hour idle auto-lock, 15-minute warning banner |
@@ -86,7 +86,7 @@ All cryptography uses the browser's native **Web Crypto API** — zero external 
 ```
 User password
      │
-     ▼  PBKDF2 (250k iterations, random 16-byte salt, SHA-256)
+     ▼  PBKDF2 (250,000 iterations, random 16-byte salt, SHA-256)
  AES-256-GCM key  ←── memory only (sessionKey), never written to disk
      ├── decrypt known auth verifier → localStorage['vrc_setup']
      └── encrypt OpenRouter API key  → localStorage['vrc_sec']
@@ -103,7 +103,7 @@ This project was built iteratively with a formal audit between each phase — tr
 | `v1` — Initial prototype | UPI parser, daily entry, basic AI call, localStorage |
 | `v2` — Deployment audit | Full readiness report written (scored 62/100), gaps identified |
 | `v3` — Phase 1 fixes | Removed hardcoded password hint, fixed duplicate UPI bug, added real 4-agent pipeline, JSON backup/restore, 3-step entry guide |
-| `v4` — Phase 2 security | First-run setup wizard, SHA-256 hashed passwords, PBKDF2 + AES-GCM API key encryption, 2-hour idle auto-lock, AI quota tracker (3 calls/day), fetchWithRetry with friendly error handling |
+| `v4` — Phase 2 security | First-run setup wizard, PBKDF2-SHA-256 password verification, AES-GCM API key encryption, 2-hour idle auto-lock, AI quota tracker (3 calls/day), fetchWithRetry with friendly error handling |
 | `v5` — Phase 3 resilience | Day-of-week patterns, same-day AI response cache, login throttling, storage warnings, and empty-save protection |
 | `v6` — Current | OpenRouter Claude pipeline, PBKDF2-derived AES-GCM password verifier, CSP/SRI hardening, atomic backup validation, India-local dates, cache correctness, and overlapping-run protection |
 
@@ -139,6 +139,8 @@ cd vrc-ai-profit-agent
 2. Go to **⚙️ More → AI Agent Configuration** to add your OpenRouter API key
 3. Start entering daily data on the **📝 Entry** tab
 
+**Developer manual test — deferred password migration:** Create a legacy account record containing `pwdHash`, fill `localStorage` close enough to quota that `saveSetup(migrated)` throws, then log in. Login should still succeed and the agent bar should show “⚠️ Security upgrade pending. Go to ⚙️ Settings → Change Password to complete it.” When storage has capacity and migration succeeds, no warning should appear. Clear the test data afterward.
+
 ---
 
 ## Known Limitations
@@ -146,7 +148,10 @@ cd vrc-ai-profit-agent
 - **Not tested with live shop data across multiple real weeks** — this is the honest gap. Demo data and simulated entries were used for development. Real-world pilot testing is the active next step.
 - **localStorage only** — data lives on the device and browser used. JSON backup is available but requires manual export.
 - **Single-device** — no cloud sync across devices.
-- **Direct browser API call** — OpenRouter is called directly from the browser. The API key is AES-GCM encrypted in storage, but travels in request headers. Do not use on public networks without understanding this.
+- **AI calls route through OpenRouter** — the app calls `https://openrouter.ai/api/v1/chat/completions`
+  using an OpenRouter API key. The key is AES-GCM encrypted in storage but travels in the
+  `Authorization: Bearer` header on each request. Do not use on untrusted public networks.
+  The model is `anthropic/claude-sonnet-4` via OpenRouter — not a direct Anthropic API call.
 
 ---
 
