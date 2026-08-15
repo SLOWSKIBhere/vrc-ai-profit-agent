@@ -21,7 +21,7 @@ Every technical decision in this project came from that reality.
 
 ## Live Demo
 
-Open `VRC_AIProfit_Agent_v4.html` in any modern browser. No install. No backend. No dependencies to install.
+Open `index.html` in any modern browser. No install. No backend. No dependencies to install.
 
 On first open, a 3-step setup wizard runs to configure your shop name, password, and daily revenue target.
 
@@ -68,27 +68,28 @@ On first open, a 3-step setup wizard runs to configure your shop name, password,
 
 ## Security Architecture
 
-This was designed around a real threat model: a shared family device with no guaranteed private access, and an Anthropic API key with real monetary value.
+This was designed around a real threat model: a shared family device with no guaranteed private access, and an OpenRouter API key with real monetary value.
 
 | Layer | Implementation |
 |---|---|
-| Password storage | SHA-256 hash with per-user salt — plaintext never stored |
-| Key derivation | PBKDF2 (100,000 iterations, SHA-256) |
-| API key encryption | AES-GCM (256-bit) — key never touches localStorage in plaintext |
+| Password verification | PBKDF2-SHA-256 (250,000 iterations, 16-byte random salt) derives an AES-GCM key that decrypts a known verifier; plaintext is never stored |
+| Key derivation | PBKDF2 iteration values are bounded from 100,000 to 1,000,000; invalid stored values use the 250,000-iteration default |
+| API key encryption | AES-GCM (256-bit) — the OpenRouter key never touches localStorage in plaintext |
 | Session management | 2-hour idle auto-lock, 15-minute warning banner |
 | Input sanitisation | `san()`, `esc()`, `vN()` on all user inputs |
 | XSS prevention | All dynamic HTML escaped before render |
+
+Current setups persist neither the plaintext password nor a fast password hash. Legitimate legacy SHA-256 password data remains supported for one-time migration after a successful login.
 
 All cryptography uses the browser's native **Web Crypto API** — zero external dependencies.
 
 ```
 User password
      │
-     ▼  PBKDF2 (100k iterations, random 16-byte salt, SHA-256)
+     ▼  PBKDF2 (250,000 iterations, random 16-byte salt, SHA-256)
  AES-256-GCM key  ←── memory only (sessionKey), never written to disk
-     │
-     ▼  encryptStr(apiKey, sessionKey)
-  { iv: base64, data: base64 }  →  localStorage['vrc_sec']
+     ├── decrypt known auth verifier → localStorage['vrc_setup']
+     └── encrypt OpenRouter API key  → localStorage['vrc_sec']
 ```
 
 ---
@@ -102,7 +103,9 @@ This project was built iteratively with a formal audit between each phase — tr
 | `v1` — Initial prototype | UPI parser, daily entry, basic AI call, localStorage |
 | `v2` — Deployment audit | Full readiness report written (scored 62/100), gaps identified |
 | `v3` — Phase 1 fixes | Removed hardcoded password hint, fixed duplicate UPI bug, added real 4-agent pipeline, JSON backup/restore, 3-step entry guide |
-| `v4` — Phase 2 security | First-run setup wizard, SHA-256 hashed passwords, PBKDF2 + AES-GCM API key encryption, 2-hour idle auto-lock, AI quota tracker (3 calls/day), fetchWithRetry with friendly error handling |
+| `v4` — Phase 2 security | First-run setup wizard, PBKDF2-SHA-256 password verification, AES-GCM API key encryption, 2-hour idle auto-lock, AI quota tracker (3 calls/day), fetchWithRetry with friendly error handling |
+| `v5` — Phase 3 resilience | Day-of-week patterns, same-day AI response cache, login throttling, storage warnings, and empty-save protection |
+| `v6` — Current | OpenRouter Claude pipeline, PBKDF2-derived AES-GCM password verifier, CSP/SRI hardening, atomic backup validation, India-local dates, cache correctness, and overlapping-run protection |
 
 ---
 
@@ -111,10 +114,10 @@ This project was built iteratively with a formal audit between each phase — tr
 ```
 Frontend      Vanilla JS (ES2022) · HTML5 · CSS3
 Crypto        Web Crypto API — PBKDF2, AES-GCM, SHA-256
-AI            Anthropic Claude API (claude-sonnet-4-20250514)
+AI            OpenRouter Chat Completions API (anthropic/claude-sonnet-4)
 Charts        Chart.js 4.4.0
 Storage       localStorage (client-side only, no backend)
-Size          Single HTML file · 83KB · 1,491 lines · zero npm installs
+Size          Single HTML file · no build step · zero npm installs
 ```
 
 ---
@@ -122,19 +125,21 @@ Size          Single HTML file · 83KB · 1,491 lines · zero npm installs
 ## How to Use
 
 ### Option A — Just open it
-Download `VRC_AIProfit_Agent_v4.html` and open in Chrome, Firefox, or Safari. That's it.
+Download `index.html` and open it in Chrome, Firefox, or Safari. That's it.
 
 ### Option B — Clone the repo
 ```bash
-git clone https://github.com/YOUR_USERNAME/vrc-ai-profit-agent.git
+git clone https://github.com/SLOWSKIBhere/vrc-ai-profit-agent.git
 cd vrc-ai-profit-agent
-# Open VRC_AIProfit_Agent_v4.html in your browser
+# Open index.html in your browser
 ```
 
 ### Setup (first open)
 1. Complete the 3-step wizard — shop name, password, daily target
-2. Go to **⚙️ More → AI Agent Configuration** to add your Anthropic API key
+2. Go to **⚙️ More → AI Agent Configuration** to add your OpenRouter API key
 3. Start entering daily data on the **📝 Entry** tab
+
+**Developer manual test — deferred password migration:** Create a legacy account record containing `pwdHash`, fill `localStorage` close enough to quota that `saveSetup(migrated)` throws, then log in. Login should still succeed and the agent bar should show “⚠️ Security upgrade pending. Go to ⚙️ Settings → Change Password to complete it.” When storage has capacity and migration succeeds, no warning should appear. Clear the test data afterward.
 
 ---
 
@@ -143,7 +148,10 @@ cd vrc-ai-profit-agent
 - **Not tested with live shop data across multiple real weeks** — this is the honest gap. Demo data and simulated entries were used for development. Real-world pilot testing is the active next step.
 - **localStorage only** — data lives on the device and browser used. JSON backup is available but requires manual export.
 - **Single-device** — no cloud sync across devices.
-- **Direct browser API call** — the Anthropic API is called directly from the browser (with `anthropic-dangerous-direct-browser-access: true`). The API key is AES-GCM encrypted in storage, but travels in request headers. Do not use on public networks without understanding this.
+- **AI calls route through OpenRouter** — the app calls `https://openrouter.ai/api/v1/chat/completions`
+  using an OpenRouter API key. The key is AES-GCM encrypted in storage but travels in the
+  `Authorization: Bearer` header on each request. Do not use on untrusted public networks.
+  The model is `anthropic/claude-sonnet-4` via OpenRouter — not a direct Anthropic API call.
 
 ---
 
@@ -161,10 +169,11 @@ cd vrc-ai-profit-agent
 
 ## Roadmap
 
-- [ ] Phase 3 — Real-world pilot with 1 shop owner over 4+ weeks
+- [x] Phase 3 — Day-of-week patterns, AI caching, login throttling, and storage safeguards
+- [ ] Phase 4 — Real-world pilot with 1 shop owner over 4+ weeks
 - [ ] Telugu language support for labels and AI prompts  
 - [ ] Multi-shop support (multiple localStorage namespaces or Supabase backend)
-- [ ] First-run setup personalisation (remove hardcoded shop name)
+- [x] First-run setup personalisation (configured shop name used throughout)
 - [ ] Automated festival calendar (Ugadi, Sankranti, Dussehra, Diwali) for AP region
 
 ---
@@ -201,4 +210,3 @@ MIT — use it, learn from it, build on it.
 [LinkedIn](https://www.linkedin.com/in/kowshik-jallipalli-a7b301229)
 
 *First agentic AI project. More coming.*
- 
